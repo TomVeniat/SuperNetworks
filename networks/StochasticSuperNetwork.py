@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from interfaces.Observable import Observable
+
 from networks.SuperNetwork import SuperNetwork
 
 
@@ -124,7 +124,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         self.fire(type='new_iteration')
 
         for node_name in self.traversal_order:
-            #todo: Implemented this way to work with old implementation, can be done in a better way now.
+            # todo: Implemented this way to work with old implementation, can be done in a better way now.
             node = self.net.node[node_name]
             sampling = self.batched_sampling[:, node['sampling_param']]
             self.fire(type='sampling', node=node_name, value=sampling)
@@ -195,4 +195,5 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                       '\t{} meta-params\n'
         return model_descr.format(type(self).__name__, self.graph.number_of_nodes(), len(self.blocks), self.n_layers,
                                   self.n_comp_steps, sum(i.numel() for i in self.parameters()),
-                                  sum(i.numel() for i in self.parameters() if i.requires_grad), len(self.sampling_parameters))
+                                  sum(i.numel() for i in self.parameters() if i.requires_grad),
+                                  len(self.sampling_parameters))

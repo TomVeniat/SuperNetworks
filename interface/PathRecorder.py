@@ -3,6 +3,7 @@ import abc
 import networkx as nx
 import torch
 
+
 class PathRecorder(object):
     __metaclass__ = abc.ABCMeta
 
