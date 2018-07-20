@@ -2,9 +2,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from interface.NetworkBlock import ConvBn, Upsamp_Block, Add_Block, NetworkBlock, DummyBlock
-from networks.StochasticSuperNetwork import StochasticSuperNetwork
-from utils.drawer.ThreeDimNeuralFabricDrawer import ThreeDimNeuralFabricDrawer
+from ..interface.NetworkBlock import ConvBn, Upsamp_Block, Add_Block, NetworkBlock, DummyBlock
+from ..networks.StochasticSuperNetwork import StochasticSuperNetwork
+from ..utils.drawer.ThreeDimNeuralFabricDrawer import ThreeDimNeuralFabricDrawer
 
 
 def downsampling_layer(n_chan, k_size, bias=True, in_chan=None, size=None, adapt=True):

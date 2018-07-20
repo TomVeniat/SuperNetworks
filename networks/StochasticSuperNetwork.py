@@ -3,9 +3,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from interfaces.Observable import Observable
 
-from networks.SuperNetwork import SuperNetwork
+from ..interface.Observable import Observable
+from ..networks.SuperNetwork import SuperNetwork
 
 
 class StochasticSuperNetwork(Observable, SuperNetwork):
@@ -33,7 +33,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         Fires a "sampling" event with the node name and the sampling Variable.
         :param node_name: Name of the node to sample
         :param out: Tensor on which the sampling will be applied
-        :return: A Variable brodcastable to out's size, with all dimensions equals to one except the first one (batch)
+        :return: A Variable brodcastable to out size, with all dimensions equals to one except the first one (batch)
         """
 
         batch_size = out.size(0)
@@ -75,7 +75,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         return None
 
-    def forward(self, *input):
+    def forward(self, *input, return_features=False):
         if len(input) != 1:
             raise RuntimeError("SSN forward's input must be a single tensor, got {}".format(len(input)))
         # self._sample_archs(input[0].size(0))
@@ -93,7 +93,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             out = out * sampling
 
             if node == self.out_node:
-                return out
+                return out, input if return_features else out
 
             for succ in self.net.successors(node):
                 if 'input' not in self.net.node[succ]:
@@ -102,7 +102,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
     def sample_archs(self, n_archs=None, all_same=False):
         if n_archs is not None and all_same:
-            raise ValueError('n_archs and all_same are mututaly exclusive.')
+            raise ValueError('n_archs and all_same are mutually exclusive.')
         self._sample_archs(n_archs)
         self.all_same = all_same
 

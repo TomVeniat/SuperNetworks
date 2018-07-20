@@ -3,7 +3,7 @@ import matplotlib
 matplotlib.use('SVG')
 import matplotlib.pyplot as plt
 
-from src.utils.drawers.Drawer import Drawer
+from .Drawer import Drawer
 
 
 class ThreeDimNeuralFabricDrawer(Drawer):
