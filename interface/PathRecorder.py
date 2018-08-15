@@ -1,6 +1,5 @@
 import abc
 
-import networkx as nx
 import torch
 
 
@@ -16,50 +15,50 @@ class PathRecorder(object):
         # create node-to-index and index-to-node mapping
         self.node_index = {}
         self.rev_node_index = [None] * self.n_nodes
-        for i, node in enumerate(nx.topological_sort(self.graph)):  # To have index ordered as traversal_order
+        for i, node in enumerate(model.traversal_order):
             self.node_index[node] = i
             self.rev_node_index[i] = node
 
         self.global_sampling = None
         self.n_samplings = 0
 
-        self.active = None
-        self.sampling = None
+        self.active_nodes_seq = None
+        self.samplings = None
 
         model.subscribe(self.new_event)
 
     def new_event(self, e):
-        if e.type is 'sampling':
-            self.add_sampling(e.node, e.value)
+        if e.type is 'new_sequence':
+            self.new_sequence()
         elif e.type is 'new_iteration':
             self.new_iteration()
+        elif e.type is 'sampling':
+            self.new_sampling(e.node, e.value)
 
-    def update_global_sampling(self, used_nodes):
-        self.n_samplings += 1
-        mean_sampling = used_nodes.mean(1).squeeze()
-
-        if self.global_sampling is None:
-            self.global_sampling = mean_sampling
-        else:
-            self.global_sampling += (1 / self.n_samplings) * (mean_sampling - self.global_sampling)
+    def new_sequence(self):
+        self.active_nodes_seq = []
+        self.samplings = []
 
     def new_iteration(self):
-        if self.default_out is not None and self.active is not None:
-            pruned = self.get_pruned_architecture(self.default_out)
-            self.update_global_sampling(pruned)
+        # Todo: adapt the global sampling idea in the sequence settings, maybe with a different global sampling for each class.
+        # if self.default_out is not None and self.active is not None:
+        #     pruned = self.get_pruned_architecture(self.default_out)
+        #     self.update_global_sampling(pruned)
 
-        self.active = torch.Tensor()
-        self.sampling = torch.Tensor()
+        self.active_nodes_seq.append(torch.Tensor())
+        self.samplings.append(torch.Tensor())
 
-    def add_sampling(self, node_name, sampling):
+    def new_sampling(self, node_name, sampling):
         if isinstance(sampling, torch.Tensor):
-            sampling = sampling.data.cpu().squeeze()
-        if self.active is None:
-            raise RuntimeError("'new_iteration' should be called before each evaluation.")
+            sampling = sampling.cpu().squeeze()
+
         if sampling.dim() == 0:
             sampling.unsqueeze_(0)
         if sampling.dim() != 1:
             raise ValueError("'sampling' param should be of dimension one.")
+
+        self.active = self.active_nodes_seq[-1]
+        self.sampling = self.samplings[-1]
 
         batch_size = sampling.size(0)
 
@@ -68,14 +67,14 @@ class PathRecorder(object):
             self.sampling.resize_(self.n_nodes, batch_size).zero_()
 
         node_ind = self.node_index[node_name]
+        self.sampling[node_ind] = sampling
+
         incoming = self.active[node_ind]
-
-        self.sampling[self.node_index[node_name]] = sampling
-
-        if len(list(self.graph.predecessors(node_name))) == 0:
+        predecessors = list(self.graph.predecessors(node_name))
+        if len(predecessors) == 0:
             incoming[node_ind] += sampling
 
-        for prev in self.graph.predecessors(node_name):
+        for prev in predecessors:
             incoming += self.active[self.node_index[prev]]
 
         assert incoming.size() == torch.Size((self.n_nodes, batch_size))
@@ -89,6 +88,15 @@ class PathRecorder(object):
         incoming *= sampling_mask
 
         self.active[node_ind] = (incoming != 0).float()
+
+    def update_global_sampling(self, used_nodes):
+        self.n_samplings += 1
+        mean_sampling = used_nodes.mean(1).squeeze()
+
+        if self.global_sampling is None:
+            self.global_sampling = mean_sampling
+        else:
+            self.global_sampling += (1 / self.n_samplings) * (mean_sampling - self.global_sampling)
 
     def get_used_nodes(self, architectures):
         """
@@ -143,14 +151,24 @@ class PathRecorder(object):
         consistence = self.get_consistence(model.out_node)
         return consistence.sum() != 0
 
-    def get_architectures(self, out_node):
+    def get_architectures(self, out_node=None):
+        if out_node is None:
+            out_node = self.default_out
         return self.get_sampled_architectures(), self.get_pruned_architecture(out_node)
 
     def get_sampled_architectures(self):
-        return self.sampling
+        """
+
+        :return: the real samplings in size (seq_len*n_nodes*batch_size)
+        """
+        return torch.stack(self.samplings)
 
     def get_pruned_architecture(self, out_node):
-        return self.active[self.node_index[out_node]]
+        """
+        :return: the pruned samplings in size (seq_len*n_nodes*batch_size)
+        """
+        out_index = self.node_index[out_node]
+        return torch.stack([active[out_index] for active in self.active_nodes_seq])
 
     def get_state(self):
         return {'node_index': self.node_index,

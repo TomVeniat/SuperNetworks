@@ -2,10 +2,18 @@ import networkx as nx
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+from torchnet.meter import AverageValueMeter
 
 from ..interface.Observable import Observable
 from ..networks.SuperNetwork import SuperNetwork
+
+
+def compute_entropy(probas):
+    mask = (probas == 0) + (probas == 1)
+    neg_probas = torch.ones_like(probas) - probas
+    entropies = - probas * probas.log2() - neg_probas * neg_probas.log2()
+    entropies[mask] = 0
+    return entropies
 
 
 class StochasticSuperNetwork(Observable, SuperNetwork):
@@ -20,7 +28,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         self.nodes_param = None
         self.probas = None
-        self.entropies = None
+        self.entropies = AverageValueMeter()
         self.mean_entropy = None
         self.deter_eval = deter_eval
 
@@ -71,7 +79,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         if not self.training and self.deter_eval:
             # Model is in deterministic evaluation mode
-            return (F.sigmoid(self.sampling_parameters[node['sampling_param']]) > 0.5).item()
+            return (torch.sigmoid(self.sampling_parameters[node['sampling_param']]) > 0.5).item()
 
         return None
 
@@ -100,22 +108,27 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                     self.net.node[succ]['input'] = []
                 self.net.node[succ]['input'].append(out)
 
-    def sample_archs(self, n_archs=None, all_same=False):
+    def sample_archs(self, n_archs=None, all_same=False, probas=None):
         if n_archs is not None and all_same:
             raise ValueError('n_archs and all_same are mutually exclusive.')
-        self._sample_archs(n_archs)
+        self._sample_archs(n_archs, probas)
         self.all_same = all_same
 
         self._fire_all_samplings()
 
-    def _sample_archs(self, batch_size=None):
+    def _sample_archs(self, batch_size=None, probas=None):
         batch_size = batch_size or 1
-        params = torch.stack(list(self.sampling_parameters), dim=1)
-        probas = params.sigmoid().expand(batch_size, len(self.sampling_parameters))
+        if probas is None:
+            params = torch.stack(list(self.sampling_parameters), dim=1)
+            probas = params.sigmoid().expand(batch_size, len(self.sampling_parameters))
+
+        entropies = compute_entropy(probas.detach())
+        self.entropies.add(entropies.sum(0), n=batch_size)
+
         distrib = torch.distributions.Bernoulli(probas)
         self.batched_sampling = distrib.sample()
 
-        self.batched_log_probas = distrib.log_prob(self.batched_sampling)
+        self.batched_log_probas.append(distrib.log_prob(self.batched_sampling))
 
     def _fire_all_samplings(self):
         """
@@ -149,6 +162,12 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     @property
     def all_probas(self):
         return {**self.nodes_proba, **self.edges_proba}
+
+    @property
+    def entropy(self):
+        mean, _ = self.entropies.value()
+        self.entropies.reset()
+        return mean
 
     def reinit_sampling_params(self):
         new_params = nn.ParameterList()

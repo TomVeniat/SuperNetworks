@@ -2,15 +2,15 @@ import logging
 
 import torch
 
-from implementation.EdgeCostEvaluator import EdgeCostEvaluator
-from interface.NetworkBlock import NetworkBlock
+from ..implementation.EdgeCostEvaluator import EdgeCostEvaluator
+from ..interface.NetworkBlock import NetworkBlock
 
 logger = logging.getLogger(__name__)
 
 
-class ComputationalCostEvaluator(EdgeCostEvaluator):
+class ComputationCostEvaluator(EdgeCostEvaluator):
 
-    def init_costs(self, model, main_cost):
+    def init_costs(self, model):
         with torch.no_grad():
             input_var = (torch.ones(1, *model.input_size),)
             graph = model.net
@@ -29,10 +29,7 @@ class ComputationalCostEvaluator(EdgeCostEvaluator):
                 else:
                     raise RuntimeError
 
-                if main_cost:
-                    cur_node['cost'] = cost
-
-                self.costs[self.path_recorder.node_index[node]] = cost
+                self.costs[self.node_index[node]] = cost
                 cur_node['input'] = []
 
                 for succ in graph.successors(node):
