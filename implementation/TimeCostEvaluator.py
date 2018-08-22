@@ -1,7 +1,6 @@
 import logging
 
 import torch
-
 from implementation.EdgeCostEvaluator import EdgeCostEvaluator
 from interface.NetworkBlock import NetworkBlock
 
