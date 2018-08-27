@@ -119,21 +119,6 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         return sum([mod.n_comp_steps for mod in self.blocks])
 
     @property
-    def edges_proba(self):
-        return {(u, v): self.sampling_parameters[self.net.nodes[n]['sampling_param']].sigmoid().item()
-                for u, v, n in self.net.edges.data('width_node')}
-
-    @property
-    def nodes_proba(self):
-        return {n: self.sampling_parameters[p].sigmoid().item() for n, p in self.net.nodes.data('sampling_param')}
-
-    @property
-    def all_probas(self):
-        return {**self.nodes_proba, **self.edges_proba}
-
-
-
-    @property
     def ordered_node_names(self):
         return [elt[0] for elt in sorted(self.net.nodes.data('sampling_param'), key=lambda x: x[1])]
 
