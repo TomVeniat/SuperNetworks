@@ -57,8 +57,8 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
             if len(input) == 0:
                 raise RuntimeError('Node {} has no inputs'.format(node))
-            out = cur_node['module'](input)
 
+            out = cur_node['module'](input)
             sampling = self.get_sampling(node, out)
             out = out * sampling
 

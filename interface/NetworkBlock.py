@@ -79,16 +79,14 @@ class Upsamp_Block(NetworkBlock):
         self.conv_layer = ConvBn(in_chan, out_chan, relu=relu, k_size=k_size, bias=bias)
         self.scale_factor = scale_factor
         self.scale_size = scale_size
-        rescale_params = dict(mode='bilinear', align_corners=False)
+        self.rescale_params = dict(mode='bilinear', align_corners=False)
         if self.scale_size:
-            rescale_params['size'] = self.scale_size
+            self.rescale_params['size'] = self.scale_size
         else:
-            rescale_params['scale_factor'] = self.scale_factor
-
-        self.rescale = lambda x: F.upsample(x, **rescale_params)
+            self.rescale_params['scale_factor'] = self.scale_factor
 
     def forward(self, x):
-        x = self.rescale(x)
+        x = F.interpolate(x, **self.rescale_params)
         return self.conv_layer(x)
 
     def get_flop_cost(self, x):

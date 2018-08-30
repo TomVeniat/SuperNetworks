@@ -7,19 +7,24 @@ from ..networks.StochasticSuperNetwork import StochasticSuperNetwork
 from ..utils.drawer.ThreeDimNeuralFabricDrawer import ThreeDimNeuralFabricDrawer
 
 
-def downsampling_layer(n_chan, k_size, bias=True, in_chan=None, size=None, adapt=True):
+def downsampling_layer(n_chan, k_size, bias=True, in_chan=None, size=None, rounding='ceil'):
     """
     :param size: the *input* size given to this layer
+    :param rounding: The rounding method used to calculate the size of the downscaled feature maps.
 
     :return: A ConvBn layer with a stride of two.
      For a given square image a size N:
-        if adapt is set to True (default), the output will be of size N/2 if N is even, (N-1)/2 if N is odd.
-        if adapt is set to False, the output will be of size N/2 if N is even, (N+1)/2 if N is odd.
+        if adapt is set to True (default), the output will be of size N/2 if N is even, (N+1)/2 if N is odd.
+        if adapt is set to False, the output will be of size N/2 if N is even, (N-1)/2 if N is odd.
     """
-    if not adapt and size and size % 2 == 1:
-        padding = 0
+    if rounding == 'ceil':
+        padding = (1, 1)
+    elif rounding == 'floor' and size:
+        # we want a padding of 1 in the dim is Even, 0 if it's odd
+        padding = tuple((1 - (dim_size % 2) for dim_size in size))
     else:
-        padding = 1
+        raise RuntimeError
+
     in_chan = in_chan or n_chan
     return ConvBn(in_chan, n_chan, relu=False, k_size=k_size, stride=2, padding=padding, bias=bias)
 
@@ -64,20 +69,21 @@ class Out(NetworkBlock):
         return x[0].size(1) * y.size(1)
 
 
-def get_scales(in_dim, downscale_rounding, n_scales):
-    scales = [in_dim[-1]]
-    n_scales = n_scales if n_scales > 0 else np.inf
+def get_scales(in_dim, downscale_rounding, n_scale):
+    scales = [tuple(in_dim[-2:])]
+    if not n_scale or n_scale < 0:
+        n_scale = np.inf
 
     s = 1
-    while scales[-1] != 1 and s < n_scales:
+    while 1 not in scales[-1] and s < n_scale:
         s += 1
-        scales.append(int(downscale_rounding(scales[-1] / 2)))
+        scales.append((int(downscale_rounding(scales[-1][0] / 2)), int(downscale_rounding(scales[-1][1] / 2))))
     return scales
 
 
 class ThreeDimNeuralFabric(StochasticSuperNetwork):
     def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, static_node_proba, kernel_size=3, bias=True,
-                 scales=None, downscale_rounding='ceil', adapt_first=False, *args, **kwargs):
+                 n_scale=0, rounding_method='ceil', adapt_first=False, *args, **kwargs):
         """
         Represents a 3 Dimensional Neural fabric, in which each layer, scale position has several identical blocks.
         :param n_layer:
@@ -100,17 +106,17 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self.bias = bias
 
         self.adapt_first = adapt_first
-        if downscale_rounding == 'ceil':
+        if rounding_method == 'ceil':
             downscale_rounding = np.ceil
-        elif downscale_rounding == 'floor':
+        elif rounding_method == 'floor':
             downscale_rounding = np.floor
         else:
-            raise ValueError("'downscale_rounding' param must be 'ceil' or 'floor' (got {})".format(downscale_rounding))
+            raise ValueError("'downscale_rounding' param must be 'ceil' or 'floor' (got {})".format(rounding_method))
         self.downscale_rounding = downscale_rounding
 
         self._input_size = input_dim
 
-        self.scales = get_scales(self.input_size, self.downscale_rounding, scales)
+        self.scales = get_scales(self.input_size, self.downscale_rounding, n_scale)
         self.n_scales = len(self.scales)
 
         self.out_size = n_classes
@@ -118,8 +124,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self.loss = nn.CrossEntropyLoss(reduce=False)
 
         conv_params = (self.n_chan, self.kernel_size, self.bias)
-        self.downsampling = lambda **kwargs: downsampling_layer(*conv_params, **kwargs,
-                                                                adapt=self.downscale_rounding == np.ceil)
+        self.downsampling = lambda **kwargs: downsampling_layer(*conv_params, **kwargs, rounding=rounding_method)
         self.samesampling = lambda **kwargs: samesampling_layer(*conv_params, **kwargs)
         self.upsampling = lambda **kwargs: upsampling_layer(*conv_params, **kwargs)
 
@@ -237,8 +242,8 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         pos3d = ThreeDimNeuralFabricDrawer.get_draw_pos_3d(out_block)
         sampling_param = self.sampling_param_generator(static=True)
 
-        n_features = self.n_chan * self.scales[-1] * self.scales[-1]
-        mod = out_module_factory(n_features, self.out_size, self.bias)
+        self.n_features = self.n_chan * self.scales[-1][0] * self.scales[-1][1]
+        mod = out_module_factory(self.n_features, self.out_size, self.bias)
 
         self.graph.add_node(out_block, module=mod, sampling_param=len(self.sampling_parameters), pos=pos, pos3d=pos3d)
 
