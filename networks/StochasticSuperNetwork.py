@@ -120,7 +120,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
     @property
     def ordered_node_names(self):
-        return [elt[0] for elt in sorted(self.net.nodes.data('sampling_param'), key=lambda x: x[1])]
+        return [str(elt[0]) for elt in sorted(self.net.nodes.data('sampling_param'), key=lambda x: x[1])]
 
     def update_probas_and_entropies(self):
         if self.nodes_param is None:
