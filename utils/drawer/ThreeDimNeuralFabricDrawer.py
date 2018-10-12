@@ -1,6 +1,6 @@
 import matplotlib
 
-matplotlib.use('SVG')
+# matplotlib.use('SVG')
 import matplotlib.pyplot as plt
 
 from .Drawer import Drawer

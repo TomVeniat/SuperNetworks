@@ -52,9 +52,9 @@ class ConvBn(NetworkBlock):
     n_layers = 1
     n_comp_steps = 1
 
-    def __init__(self, in_chan, out_chan, relu, k_size=3, stride=1, padding=1, bias=True):
+    def __init__(self, in_chan, out_chan, relu, k_size=3, stride=1, padding=1, dilatation=1, bias=True):
         super(ConvBn, self).__init__()
-        self.conv = nn.Conv2d(in_chan, out_chan, kernel_size=k_size, stride=stride, padding=padding, bias=bias)
+        self.conv = nn.Conv2d(in_chan, out_chan, kernel_size=k_size, stride=stride, padding=padding, dilation=dilatation, bias=bias)
         self.bn = nn.BatchNorm2d(out_chan)
         self.relu = relu
 

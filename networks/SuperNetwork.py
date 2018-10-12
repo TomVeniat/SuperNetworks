@@ -51,6 +51,14 @@ class SuperNetwork(nn.Module):
             raise RuntimeError('SuperNetworks should have an `_input_size` attribute.')
         return self._input_size
 
+    def get_ops_per_node(self):
+        return dict((node_name, node_data['module'].get_flop_cost())
+                    for node_name, node_data in dict(self.graph.nodes(True)).items())
+
+    def get_params_per_node(self):
+        return dict((node_name, sum(param.numel() for param in node_data['module'].parameters()))
+                    for node_name, node_data in dict(self.graph.nodes(True)).items())
+
     @staticmethod
     def format_input(input):
         if (isinstance(input, tuple) or isinstance(input, list)) and len(input) == 1:
