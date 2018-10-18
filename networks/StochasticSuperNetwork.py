@@ -49,9 +49,11 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     def forward(self, *input, return_features=False):
         if len(input) != 1:
             raise RuntimeError("SSN forward's input must be a single tensor, got {}".format(len(input)))
+        feats = None
 
         self.net.node[self.in_node]['input'] = [*input]
         for node in self.traversal_order:
+            # globals()['__builtins__']['input'](f'layer {node}')
             cur_node = self.net.node[node]
             input = self.format_input(cur_node.pop('input'))
 
@@ -59,11 +61,15 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 raise RuntimeError('Node {} has no inputs'.format(node))
 
             out = cur_node['module'](input)
+            if isinstance(out, tuple):
+                out, feats = out
+
             sampling = self.get_sampling(node, out)
             out = out * sampling
 
             if node == self.out_node:
-                return out, input if return_features else out
+                feats = input if feats is None else feats
+                return out, feats if return_features else out
 
             for succ in self.net.successors(node):
                 if 'input' not in self.net.node[succ]:

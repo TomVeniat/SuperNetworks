@@ -18,10 +18,18 @@ class BasicBlock(NetworkBlock):
     n_layers = 2
     n_comp_steps = 1
 
-    def __init__(self, in_chan, out_chan, bias, **kwargs):
+    def __init__(self, in_chan, out_chan, bias, paddings=None, dilatations=None, **kwargs):
         super(BasicBlock, self).__init__()
+        paddings = paddings or (1, 1)
+        dilatations = dilatations or (1, 1)
+        assert len(paddings) == 2
+        assert len(dilatations) == 2
         assert in_chan <= out_chan
+
         stride = int(out_chan / in_chan)
+        # self.conv1 = ConvBn(in_chan, out_chan, stride=stride, relu=True, padding=paddings[0], dilatation=dilatations[0], bias=bias)
+        # self.conv2 = ConvBn(out_chan, out_chan, relu=False, padding=paddings[1], dilatation=dilatations[1], bias=bias)
+
         self.conv1 = ConvBn(in_chan, out_chan, stride=stride, relu=True, bias=bias)
         self.conv2 = ConvBn(out_chan, out_chan, relu=False, bias=bias)
 
@@ -104,6 +112,28 @@ class Skip_Block(NetworkBlock):
         return 0 if self.projection is None else 1
 
 
+class In_Layer(NetworkBlock):
+    n_layers = 1
+    n_comp_steps = 1
+
+    def __init__(self, in_chan, out_chan, bias=True, relu=True, pool=False):
+        super(In_Layer, self).__init__()
+        self.pool = nn.AvgPool2d(pool) if pool else False
+        self.conv = nn.Conv2d(in_chan, out_chan, kernel_size=3, padding=1, bias=bias)
+        self.relu = relu
+
+    def forward(self, x):
+        if self.pool:
+            x = self.pool(x)
+        out = self.conv(x)
+        if self.relu:
+            out = F.relu(out)
+        return out
+
+    def get_flop_cost(self, x):
+        y = self(x)
+        return self.get_conv2d_flops(x, y, self.conv.kernel_size)
+
 class Out_Layer(NetworkBlock):
     n_layers = 1
     n_comp_steps = 1
@@ -113,11 +143,11 @@ class Out_Layer(NetworkBlock):
         self.fc = nn.Linear(in_chan, out_dim, bias=bias)
 
     def forward(self, x):
-        assert x.size(-1) == 8
-        x = F.avg_pool2d(x, x.size()[2:])
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x
+        # assert x.size(-1) == 8
+        feats = F.avg_pool2d(x, x.size()[2:])
+        feats = feats.view(feats.size(0), -1)
+        x = self.fc(feats)
+        return x, feats
 
     def get_flop_cost(self, x):
         return self.fc.in_features * self.fc.out_features
@@ -134,7 +164,7 @@ class DenseResnet(StochasticSuperNetwork):
     IDENT_NAME = 'IDENT_B{}'
 
     def __init__(self, layers, blocks_per_layer, n_channels, shortcuts, shortcuts_res, shift, input_dim, n_classes,
-                 static_node_proba, bottlnecks, bn_factor=4, bias=True, *args, **kwargs):
+                 static_node_proba, bottlnecks, bn_factor=4, bias=True, dilatation=False, pool_in=False, *args, **kwargs):
         super(DenseResnet, self).__init__(*args, **kwargs)
 
         self._input_size = input_dim
@@ -163,23 +193,23 @@ class DenseResnet(StochasticSuperNetwork):
         if len(blocks_per_layer) == 1:
             blocks_per_layer = blocks_per_layer * len(n_channels)
 
-        in_node = ConvBn(self._input_size[0], n_channels[0], relu=True, bias=bias)
+        in_node = In_Layer(self._input_size[0], n_channels[0], bias=False, pool=(4, 3) if pool_in else False)
         self.add_node([], self.INPUT_NAME, in_node, (0, 0))
 
         last_node = self.add_layer(0, blocks_per_layer[0], n_channels[0], n_channels[0] * self.scale_factor,
                                    self.INPUT_NAME, False,
-                                   False, shift, bias, stride=False)
+                                   False, shift, bias, stride=False, dilat=dilatation)
         for l in range(1, layers):
             in_chan = n_channels[l - 1] * self.scale_factor
             last_node = self.add_layer(l, blocks_per_layer[l], in_chan, n_channels[l] * self.scale_factor, last_node,
                                        shortcuts, shortcuts_res,
-                                       shift, bias, stride=True)
+                                       shift, bias, stride=True, dilat=dilatation)
 
         out_node = Out_Layer(n_channels[-1] * self.scale_factor, self.out_dim, bias=bias)
         self.add_node([last_node], self.OUTPUT_NAME, out_node, (layers - 1, blocks_per_layer[-1] + 1))
         self.set_graph(self.graph, self.INPUT_NAME, self.OUTPUT_NAME)
 
-    def add_layer(self, b, n_blocks, in_chan, out_chan, last_node, shortcuts, sh_res, shift, bias, stride):
+    def add_layer(self, b, n_blocks, in_chan, out_chan, last_node, shortcuts, sh_res, shift, bias, stride, dilat):
         prev_in_chan = in_chan
         for n in range(n_blocks):
             use_stride = stride and n == 0
