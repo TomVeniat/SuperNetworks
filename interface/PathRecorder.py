@@ -1,4 +1,5 @@
 import abc
+import copy
 
 import torch
 
@@ -49,6 +50,12 @@ class PathRecorder(object):
         self.samplings.append(torch.Tensor())
 
     def new_sampling(self, node_name, sampling):
+        """
+
+        :param node_name: Noded considered
+        :param sampling: Vector of size (batch_size), corresponding to the sampling of the given node
+        :return:
+        """
         if isinstance(sampling, torch.Tensor):
             sampling = sampling.cpu().squeeze()
 
@@ -63,31 +70,54 @@ class PathRecorder(object):
         batch_size = sampling.size(0)
 
         if self.active.numel() == 0 and self.sampling.numel() == 0:
+            # This is the first step of the sequence
             self.active.resize_(self.n_nodes, self.n_nodes, batch_size).zero_()
             self.sampling.resize_(self.n_nodes, batch_size).zero_()
 
         node_ind = self.node_index[node_name]
         self.sampling[node_ind] = sampling
 
+        # incoming is a (n_nodes*batch_size) matrix.
+        # We will set incoming_{i,j} = 1 if the node i contributes to current node computation in batch element j
         incoming = self.active[node_ind]
+        assert incoming.sum() == 0
+
         predecessors = list(self.graph.predecessors(node_name))
+
         if len(predecessors) == 0:
+            # Considered node is the input node
             incoming[node_ind] += sampling
 
         for prev in predecessors:
+            # If the predecessor itself is active (has connection with the input),
+            # it could contribute to the computation of the considered node.
             incoming += self.active[self.node_index[prev]]
 
         assert incoming.size() == torch.Size((self.n_nodes, batch_size))
 
-        has_inputs = incoming.view(-1, batch_size).max(0)[0]
+        # has_inputs[i] > 0 if there is at least one predecessor node which is active in batch element i
+        has_inputs = incoming.max(0)[0]
+
+        # the current node has outputs if it has at least on predecessor node active AND it is sampled
         has_outputs = ((has_inputs * sampling) != 0).float()
 
+        backup = copy.deepcopy(incoming)
+
+        ###
+        # other_method = copy.deepcopy(incoming)
+        # other_method[node_ind] += has_outputs
+        # other_method = (other_method != 0).float()
+        ###
         incoming[node_ind] += sampling
 
         sampling_mask = has_outputs.expand(self.n_nodes, batch_size)
         incoming *= sampling_mask
 
-        self.active[node_ind] = (incoming != 0).float()
+        res = (incoming != 0).float()
+        self.active[node_ind] = res
+
+        # eq = res.equal(other_method)
+        # print(eq)
 
     def update_global_sampling(self, used_nodes):
         self.n_samplings += 1
@@ -151,10 +181,10 @@ class PathRecorder(object):
         consistence = self.get_consistence(model.out_node)
         return consistence.sum() != 0
 
-    def get_architectures(self, out_node=None):
-        if out_node is None:
-            out_node = self.default_out
-        return self.get_sampled_architectures(), self.get_pruned_architecture(out_node)
+    def get_architectures(self, out_nodes=None):
+        if out_nodes is None:
+            out_nodes = [self.default_out]
+        return self.get_sampled_architectures(), self.get_pruned_architecture(out_nodes)
 
     def get_sampled_architectures(self):
         """
@@ -163,12 +193,19 @@ class PathRecorder(object):
         """
         return torch.stack(self.samplings)
 
-    def get_pruned_architecture(self, out_node):
+    def get_pruned_architecture(self, out_nodes):
         """
         :return: the pruned samplings in size (seq_len*n_nodes*batch_size)
         """
-        out_index = self.node_index[out_node]
-        return torch.stack([active[out_index] for active in self.active_nodes_seq])
+        seq_len = len(self.active_nodes_seq)
+        n_nodes = self.n_nodes
+        batch_size = self.active_nodes_seq[0].size(-1)
+        res = torch.zeros((seq_len, n_nodes, batch_size))
+        for out_node in out_nodes:
+            out_index = self.node_index[out_node]
+            res += torch.stack([active[out_index] for active in self.active_nodes_seq])
+
+        return (res!=0).float()
 
     def get_state(self):
         return {'node_index': self.node_index,
