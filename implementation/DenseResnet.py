@@ -205,6 +205,7 @@ class DenseResnet(StochasticSuperNetwork):
                                        shortcuts, shortcuts_res,
                                        shift, bias, stride=True, dilat=dilatation)
 
+        self.feature_node = last_node
         out_node = Out_Layer(n_channels[-1] * self.scale_factor, self.out_dim, bias=bias)
         self.add_node([last_node], self.OUTPUT_NAME, out_node, (layers - 1, blocks_per_layer[-1] + 1))
         self.set_graph(self.graph, self.INPUT_NAME, self.OUTPUT_NAME)
