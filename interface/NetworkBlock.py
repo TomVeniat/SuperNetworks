@@ -38,10 +38,13 @@ class DummyBlock(NetworkBlock):
     n_layers = 0
     n_comp_steps = 0
 
-    def __init__(self):
+    def __init__(self, mod=None):
         super(DummyBlock, self).__init__()
+        self.mod = mod
 
     def forward(self, x):
+        if self.mod:
+            return self.mod(x)
         return x
 
     def get_flop_cost(self, x):

@@ -118,17 +118,17 @@ class In_Layer(NetworkBlock):
 
     def __init__(self, in_chan, out_chan, bias=True, relu=True, pool=False):
         super(In_Layer, self).__init__()
-        self.pool = nn.AvgPool2d(pool) if pool else False
         self.conv = nn.Conv2d(in_chan, out_chan, kernel_size=3, padding=1, bias=bias)
         self.relu = relu
+        self.pool = nn.AvgPool2d(pool) if pool else False
 
     def forward(self, x):
+        x = self.conv(x)
+        if self.relu:
+            x = F.relu(x)
         if self.pool:
             x = self.pool(x)
-        out = self.conv(x)
-        if self.relu:
-            out = F.relu(out)
-        return out
+        return x
 
     def get_flop_cost(self, x):
         y = self(x)
@@ -143,7 +143,6 @@ class Out_Layer(NetworkBlock):
         self.fc = nn.Linear(in_chan, out_dim, bias=bias)
 
     def forward(self, x):
-        # assert x.size(-1) == 8
         feats = F.avg_pool2d(x, x.size()[2:])
         feats = feats.view(feats.size(0), -1)
         x = self.fc(feats)
