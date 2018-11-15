@@ -1,17 +1,11 @@
 from numbers import Number
 
-import networkx as nx
 import numpy as np
 import torch.nn.functional as F
 from torch import nn, torch
 
-# from src.interfaces.NetworkBlock import ConvBn, NetworkBlock, Add_Block
-# from src.networks.StochasticSuperNetwork import StochasticSuperNetwork
-# from src.utils import loss
-# from src.utils.drawers.ResCNFDrawer import ResCNFDrawer
-from src.commons.sn.utils.drawer.DenseResnetDrawer import DenseResnetDrawer
-from ..networks.StochasticSuperNetwork import StochasticSuperNetwork
 from ..interface.NetworkBlock import NetworkBlock, ConvBn, Add_Block
+from ..networks.StochasticSuperNetwork import StochasticSuperNetwork
 
 
 class BasicBlock(NetworkBlock):
@@ -27,8 +21,6 @@ class BasicBlock(NetworkBlock):
         assert in_chan <= out_chan
 
         stride = int(out_chan / in_chan)
-        # self.conv1 = ConvBn(in_chan, out_chan, stride=stride, relu=True, padding=paddings[0], dilatation=dilatations[0], bias=bias)
-        # self.conv2 = ConvBn(out_chan, out_chan, relu=False, padding=paddings[1], dilatation=dilatations[1], bias=bias)
 
         self.conv1 = ConvBn(in_chan, out_chan, stride=stride, relu=True, bias=bias)
         self.conv2 = ConvBn(out_chan, out_chan, relu=False, bias=bias)
@@ -134,6 +126,7 @@ class In_Layer(NetworkBlock):
         y = self(x)
         return self.get_conv2d_flops(x, y, self.conv.kernel_size)
 
+
 class Out_Layer(NetworkBlock):
     n_layers = 1
     n_comp_steps = 1
@@ -163,7 +156,8 @@ class DenseResnet(StochasticSuperNetwork):
     IDENT_NAME = 'IDENT_B{}'
 
     def __init__(self, layers, blocks_per_layer, n_channels, shortcuts, shortcuts_res, shift, input_dim, n_classes,
-                 static_node_proba, bottlnecks, bn_factor=4, bias=True, dilatation=False, pool_in=False, *args, **kwargs):
+                 static_node_proba, bottlnecks, bn_factor=4, bias=True, dilatation=False, pool_in=False, *args,
+                 **kwargs):
         super(DenseResnet, self).__init__(*args, **kwargs)
 
         self._input_size = input_dim
@@ -175,7 +169,6 @@ class DenseResnet(StochasticSuperNetwork):
             blocks_per_layer = [blocks_per_layer]
 
         assert len(n_channels) == layers and (len(blocks_per_layer) == 1 or len(blocks_per_layer) == layers)
-
 
         self.out_dim = n_classes
         # self.loss = loss.cross_entropy_sample
@@ -193,7 +186,7 @@ class DenseResnet(StochasticSuperNetwork):
             blocks_per_layer = blocks_per_layer * len(n_channels)
 
         in_node = In_Layer(self._input_size[0], n_channels[0], bias=False, pool=(4, 3) if pool_in else False)
-        self.add_node([], self.INPUT_NAME, in_node, (0, 0))
+        self.add_node([], self.INPUT_NAME, in_node)
 
         last_node = self.add_layer(0, blocks_per_layer[0], n_channels[0], n_channels[0] * self.scale_factor,
                                    self.INPUT_NAME, False,
@@ -206,7 +199,7 @@ class DenseResnet(StochasticSuperNetwork):
 
         self.feature_node = last_node
         out_node = Out_Layer(n_channels[-1] * self.scale_factor, self.out_dim, bias=bias)
-        self.add_node([last_node], self.OUTPUT_NAME, out_node, (layers - 1, blocks_per_layer[-1] + 1))
+        self.add_node([last_node], self.OUTPUT_NAME, out_node)
         self.set_graph(self.graph, self.INPUT_NAME, self.OUTPUT_NAME)
 
     def add_layer(self, b, n_blocks, in_chan, out_chan, last_node, shortcuts, sh_res, shift, bias, stride, dilat):
@@ -217,16 +210,16 @@ class DenseResnet(StochasticSuperNetwork):
                 # Add identity block (only for drawing)
                 ident_block = Skip_Block(in_chan, in_chan, bias)
                 ident_name = self.IDENT_NAME.format(b)
-                self.add_node([last_node], ident_name, ident_block, (b,))
+                self.add_node([last_node], ident_name, ident_block)
                 last_node = ident_name
             # Add basic block
             basic_block = self.block_type(in_chan, out_chan, bias=bias, use_stride=use_stride)
             basic_block_name = self.CLASSIC_BLOCK_NAME.format(b, n)
-            self.add_node([last_node], basic_block_name, basic_block, (b, n))
+            self.add_node([last_node], basic_block_name, basic_block)
             # Add skip connection
             skip = Skip_Block(in_chan, out_chan, bias, use_stride=use_stride)
             skip_name = self.CLASSIC_SKIP_NAME.format(b, n)
-            self.add_node([last_node], skip_name, skip, (b, n))
+            self.add_node([last_node], skip_name, skip)
 
             shortcuts_add_inputs = []
             # Add shortcut:
@@ -242,29 +235,28 @@ class DenseResnet(StochasticSuperNetwork):
                     if shortcuts:
                         shortcut_block = self.block_type(sh_in_chan, out_chan, stride=special_stride, bias=bias)
                         shortcut_block_name = self.SHORTCUT_BLOCK_NAME.format(b, n, i)
-                        self.add_node([sh_in_node], shortcut_block_name, shortcut_block, (b, n))
+                        self.add_node([sh_in_node], shortcut_block_name, shortcut_block)
                         shortcuts_add_inputs.append(shortcut_block_name)
                     # Add skip connection
                     if sh_res:
                         sh_skip = Skip_Block(sh_in_chan, out_chan, stride=special_stride, bias=bias)
                         sh_skip_name = self.SHORTCUT_SKIP_NAME.format(b, n, i)
-                        self.add_node([sh_in_node], sh_skip_name, sh_skip, (b, n))
+                        self.add_node([sh_in_node], sh_skip_name, sh_skip)
                         shortcuts_add_inputs.append(sh_skip_name)
 
             # Add addition
             add_block = Add_Block()
             add_name = self.ADD_NAME.format(b, n)
-            self.add_node(shortcuts_add_inputs + [skip_name, basic_block_name], add_name, add_block, (b, n))
+            self.add_node(shortcuts_add_inputs + [skip_name, basic_block_name], add_name, add_block)
             in_chan = out_chan
             last_node = add_name
 
         return last_node
 
-    def add_node(self, in_nodes, node_name, module, pos, **args):
-        pos = DenseResnetDrawer.get_draw_pos(pos=pos, node_name=node_name)
+    def add_node(self, in_nodes, node_name, module, **args):
         sampling_param = sampling_param_generator(self.static_node_proba, node_name)
 
-        self.graph.add_node(node_name, module=module, sampling_param=len(self.sampling_parameters), pos=pos, **args)
+        self.graph.add_node(node_name, module=module, sampling_param=len(self.sampling_parameters), **args)
 
         if sampling_param is not None:
             self.sampling_parameters.append(sampling_param)
@@ -274,7 +266,6 @@ class DenseResnet(StochasticSuperNetwork):
             self.blocks.append(module)
         else:
             raise RuntimeError('Old version, should be fixed !')
-
 
         for input in in_nodes:
             self.graph.add_edge(input, node_name, width_node=node_name)

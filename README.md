@@ -1,2 +1,0 @@
-# SuperNetworks
-SuperNetwork base implementation
