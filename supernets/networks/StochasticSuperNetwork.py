@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..interface.Observable import Observable
+from supernets.interface import Observable
 from ..networks.SuperNetwork import SuperNetwork
 
 

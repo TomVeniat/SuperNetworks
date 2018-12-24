@@ -1,4 +1,4 @@
-from ..interface.CostEvaluator import CostEvaluator
+from supernets.interface.CostEvaluator import CostEvaluator
 
 
 class EdgeCostEvaluator(CostEvaluator):

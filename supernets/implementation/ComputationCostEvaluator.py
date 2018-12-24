@@ -3,7 +3,7 @@ import logging
 import torch
 
 from ..implementation.EdgeCostEvaluator import EdgeCostEvaluator
-from ..interface.NetworkBlock import NetworkBlock
+from supernets.interface import NetworkBlock
 
 logger = logging.getLogger(__name__)
 

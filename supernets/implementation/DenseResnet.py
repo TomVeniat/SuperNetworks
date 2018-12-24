@@ -1,6 +1,5 @@
 from numbers import Number
 
-import networkx as nx
 import numpy as np
 import torch.nn.functional as F
 from torch import nn, torch
@@ -10,8 +9,8 @@ from torch import nn, torch
 # from src.utils import loss
 # from src.utils.drawers.ResCNFDrawer import ResCNFDrawer
 from src.commons.sn.utils.drawer.DenseResnetDrawer import DenseResnetDrawer
-from ..networks.StochasticSuperNetwork import StochasticSuperNetwork
-from ..interface.NetworkBlock import NetworkBlock, ConvBn, Add_Block
+from supernets.networks import StochasticSuperNetwork
+from supernets.interface import NetworkBlock, ConvBn, Add_Block
 
 
 class BasicBlock(NetworkBlock):

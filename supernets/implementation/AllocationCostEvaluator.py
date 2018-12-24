@@ -1,7 +1,7 @@
 import networkx as nx
 import torch
 
-from interface.CostEvaluator import CostEvaluator
+from supernets.interface.CostEvaluator import CostEvaluator
 
 
 class AllocationCostEvaluator(CostEvaluator):
