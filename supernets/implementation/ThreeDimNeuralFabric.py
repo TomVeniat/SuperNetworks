@@ -2,9 +2,8 @@ import numpy as np
 import torch
 from torch import nn
 
-from supernets.interface import ConvBn, Upsamp_Block, Add_Block, NetworkBlock, DummyBlock
-from supernets.networks import StochasticSuperNetwork
-from supernets.utils import ThreeDimNeuralFabricDrawer
+from supernets.interface.NetworkBlock import ConvBn, Upsamp_Block, NetworkBlock, Add_Block, DummyBlock
+from supernets.networks.StochasticSuperNetwork import StochasticSuperNetwork
 
 
 def downsampling_layer(n_chan, k_size, bias=True, in_chan=None, size=None, rounding='ceil'):
@@ -175,12 +174,10 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             module = self.upsampling(size=self.scales[d_s], in_chan=in_scale)
 
         cur_node = ((s_l, s_s, s_b), (d_l, d_s, d_b))
-        pos = ThreeDimNeuralFabricDrawer.get_draw_pos(cur_node)
-        pos3d = ThreeDimNeuralFabricDrawer.get_draw_pos_3d(cur_node)
 
         sampling_param = self.sampling_param_generator()
 
-        self.graph.add_node(cur_node, module=module, sampling_param=len(self.sampling_parameters), pos=pos, pos3d=pos3d)
+        self.graph.add_node(cur_node, module=module, sampling_param=len(self.sampling_parameters))
 
         self.graph.add_edge(cur_node[0], cur_node, width_node=cur_node)
 
@@ -197,13 +194,10 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         if skip_agg:
             return
 
-        pos = ThreeDimNeuralFabricDrawer.get_draw_pos(cur_node)
-        pos3d = ThreeDimNeuralFabricDrawer.get_draw_pos_3d(cur_node)
-
         module = Add_Block()
         sampling_param = self.sampling_param_generator(static=True)
 
-        self.graph.add_node(cur_node, module=module, sampling_param=len(self.sampling_parameters), pos=pos, pos3d=pos3d)
+        self.graph.add_node(cur_node, module=module, sampling_param=len(self.sampling_parameters))
 
         # for i in inputs:
         #     self.graph.add_edge(i, cur_node, width_node=cur_node)
@@ -214,15 +208,13 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
     def _connect_input(self):
 
         in_block = 'In'
-        pos = ThreeDimNeuralFabricDrawer.get_draw_pos(in_block)
-        pos3d = ThreeDimNeuralFabricDrawer.get_draw_pos_3d(in_block)
         sampling_param = self.sampling_param_generator(static=True)
         if self.adapt_first:
             mod = in_module_factory(self._input_size[0], self.n_chan, self.kernel_size, self.bias)
         else:
             mod = DummyBlock()
 
-        self.graph.add_node(in_block, module=mod, sampling_param=len(self.sampling_parameters), pos=pos, pos3d=pos3d)
+        self.graph.add_node(in_block, module=mod, sampling_param=len(self.sampling_parameters))
 
         self.sampling_parameters.append(sampling_param)
         self.blocks.append(mod)
@@ -238,14 +230,12 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
 
     def _connect_output(self):
         out_block = 'Out'
-        pos = ThreeDimNeuralFabricDrawer.get_draw_pos(out_block)
-        pos3d = ThreeDimNeuralFabricDrawer.get_draw_pos_3d(out_block)
         sampling_param = self.sampling_param_generator(static=True)
 
         self.n_features = self.n_chan * self.scales[-1][0] * self.scales[-1][1]
         mod = out_module_factory(self.n_features, self.out_size, self.bias)
 
-        self.graph.add_node(out_block, module=mod, sampling_param=len(self.sampling_parameters), pos=pos, pos3d=pos3d)
+        self.graph.add_node(out_block, module=mod, sampling_param=len(self.sampling_parameters))
 
         self.sampling_parameters.append(sampling_param)
         self.blocks.append(mod)
