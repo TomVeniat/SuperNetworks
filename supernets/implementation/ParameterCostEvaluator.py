@@ -16,7 +16,8 @@ class ParameterCostEvaluator(EdgeCostEvaluator):
 
             self.costs = torch.Tensor(graph.number_of_nodes())
 
-            graph.node[model.in_node]['input'] = [*input_var]
+            #todo: Not final
+            graph.node[model.in_nodes[0]]['input'] = [*input_var]
             for node in model.traversal_order:
                 cur_node = graph.node[node]
                 input_var = model.format_input(cur_node['input'])

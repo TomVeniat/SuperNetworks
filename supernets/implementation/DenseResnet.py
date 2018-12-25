@@ -139,7 +139,7 @@ class Out_Layer(NetworkBlock):
         feats = F.avg_pool2d(x, x.size()[2:])
         feats = feats.view(feats.size(0), -1)
         x = self.fc(feats)
-        return x, feats
+        return x
 
     def get_flop_cost(self, x):
         return self.fc.in_features * self.fc.out_features
@@ -197,10 +197,9 @@ class DenseResnet(StochasticSuperNetwork):
                                        shortcuts, shortcuts_res,
                                        shift, bias, stride=True, dilat=dilatation)
 
-        self.feature_node = last_node
         out_node = Out_Layer(n_channels[-1] * self.scale_factor, self.out_dim, bias=bias)
         self.add_node([last_node], self.OUTPUT_NAME, out_node)
-        self.set_graph(self.graph, self.INPUT_NAME, self.OUTPUT_NAME)
+        self.set_graph(self.graph, [self.INPUT_NAME], [self.OUTPUT_NAME])
 
     def add_layer(self, b, n_blocks, in_chan, out_chan, last_node, shortcuts, sh_res, shift, bias, stride, dilat):
         prev_in_chan = in_chan

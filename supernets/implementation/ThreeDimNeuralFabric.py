@@ -133,7 +133,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self._connect_input()
         self._connect_output()
 
-        self.set_graph(self.graph, 'In', 'Out')
+        self.set_graph(self.graph, ['In'], ['Out'])
 
     def _add_layer(self, layer_idx):
         """

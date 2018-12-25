@@ -3,8 +3,8 @@ import torch
 from torch import nn
 import numpy as np
 
-from src.commons.sn.interface.NetworkBlock import DummyBlock
-from src.commons.sn.networks.StochasticSuperNetwork import StochasticSuperNetwork
+from supernets.interface.NetworkBlock import DummyBlock
+from supernets.networks.StochasticSuperNetwork import StochasticSuperNetwork
 
 
 class DummySuperNetwork(StochasticSuperNetwork):

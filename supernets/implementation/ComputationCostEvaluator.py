@@ -2,14 +2,13 @@ import logging
 
 import torch
 
-from ..implementation.EdgeCostEvaluator import EdgeCostEvaluator
-from supernets.interface import NetworkBlock
+from supernets.implementation.EdgeCostEvaluator import EdgeCostEvaluator
+from supernets.interface.NetworkBlock import NetworkBlock
 
 logger = logging.getLogger(__name__)
 
 
 class ComputationCostEvaluator(EdgeCostEvaluator):
-
     def init_costs(self, model):
         with torch.no_grad():
             input_var = (torch.ones(1, *model.input_size),)
@@ -17,7 +16,8 @@ class ComputationCostEvaluator(EdgeCostEvaluator):
 
             self.costs = torch.Tensor(graph.number_of_nodes())
 
-            graph.node[model.in_node]['input'] = [*input_var]
+            #todo: Not final
+            graph.node[model.in_nodes[0]]['input'] = [*input_var]
             for node in model.traversal_order:
                 cur_node = graph.node[node]
                 input_var = model.format_input(cur_node['input'])

@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from supernets.interface import Observable
-from ..networks.SuperNetwork import SuperNetwork
+from supernets.interface.Observable import Observable
+from supernets.networks.SuperNetwork import SuperNetwork
 
 
 class StochasticSuperNetwork(Observable, SuperNetwork):
@@ -26,6 +26,12 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         self.batched_sampling = None
         self.batched_log_probas = None
 
+        self.hook = self.apply_sampling
+
+    def apply_sampling(self, node, output):
+        sampling = self.get_sampling(node, output)
+        return output * sampling
+
     def get_sampling(self, node_name, out):
         """
         Get a batch of sampling for the given node on the given output.
@@ -46,14 +52,22 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         return sampling
 
-    def forward(self, *input, return_features=False):
-        if len(input) != 1:
-            raise RuntimeError("SSN forward's input must be a single tensor, got {}".format(len(input)))
-        feats = None
+    def forward(self, inputs, return_features=False):
+        # todo; remove this constraint
+        # if len(inputs) != 1:
+        #     raise RuntimeError("SSN forward's input must be a single tensor, got {}".format(len(input)))
 
-        self.net.node[self.in_node]['input'] = [*input]
+        # First, set the unput for each input node
+        if torch.is_tensor(inputs):
+            inputs = [inputs]
+
+        assert len(inputs) == len(self.in_nodes)
+        for node, input in zip(self.in_nodes, inputs):
+            self.net.node[node]['input'] = [input]
+
+        # Traverse the graph, saving the output of each out node
+        outputs = [None] * len(self.out_nodes)
         for node in self.traversal_order:
-            # globals()['__builtins__']['input'](f'layer {node}')
             cur_node = self.net.node[node]
             input = self.format_input(cur_node.pop('input'))
 
@@ -61,20 +75,18 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 raise RuntimeError('Node {} has no inputs'.format(node))
 
             out = cur_node['module'](input)
-            if isinstance(out, tuple):
-                out, feats = out
 
-            sampling = self.get_sampling(node, out)
-            out = out * sampling
+            self.hook(node, out)
 
-            if node == self.out_node:
-                feats = input if feats is None else feats
-                return out, feats if return_features else out
+            if node in self.out_nodes:
+                outputs[self.output_index[node]] = out
 
             for succ in self.net.successors(node):
                 if 'input' not in self.net.node[succ]:
                     self.net.node[succ]['input'] = []
                 self.net.node[succ]['input'].append(out)
+
+        return outputs
 
     def sample_archs(self, probas=None, all_same=False):
         """
@@ -113,7 +125,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
     @property
     def sampling_parameters(self):
-        print('/!\ Getting samp params /!\ ')
+        print('/!\/!\/!\ Getting samp params /!\/!\/!\ ')
         return self.samp_params
 
     @property

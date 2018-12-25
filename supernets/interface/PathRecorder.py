@@ -1,15 +1,16 @@
-import abc
+# import abc
 import copy
 
 import torch
 
 
 class PathRecorder(object):
-    __metaclass__ = abc.ABCMeta
+    # __metaclass__ = abc.ABCMeta
 
     def __init__(self, model):
         self.graph = model.graph
-        self.default_out = model.out_node
+        #todo: check default behavior
+        self.default_out = model.out_nodes[0]
 
         self.n_nodes = self.graph.number_of_nodes()
 

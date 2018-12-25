@@ -1,17 +1,17 @@
-import abc
+# import abc
 
 import torch
 
 
 class CostEvaluator(object):
-    __metaclass__ = abc.ABCMeta
+    # __metaclass__ = abc.ABCMeta
 
     def __init__(self, node_index, *args, **kwargs):
         super(CostEvaluator, self).__init__()
         self.node_index = node_index
         self.costs = None
 
-    @abc.abstractmethod
+    # @abc.abstractmethod
     def get_cost(self, **kwargs):
         raise NotImplementedError
 
