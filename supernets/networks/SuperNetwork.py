@@ -66,10 +66,10 @@ class SuperNetwork(nn.Module):
             if self.hook:
                 self.hook(node, out)
 
-            if node == self.out_node:
+            if node in self.out_nodes:
                 outputs[self.output_index[node]] = out
 
-            for succ in self.net.successors_iter(node):
+            for succ in self.net.successors(node):
                 if 'input' not in self.net.node[succ]:
                     self.net.node[succ]['input'] = []
                 self.net.node[succ]['input'].append(out)

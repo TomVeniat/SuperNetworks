@@ -52,41 +52,6 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         return sampling
 
-    def forward(self, inputs, return_features=False):
-        # todo; remove this constraint
-        # if len(inputs) != 1:
-        #     raise RuntimeError("SSN forward's input must be a single tensor, got {}".format(len(input)))
-
-        # First, set the unput for each input node
-        if torch.is_tensor(inputs):
-            inputs = [inputs]
-
-        assert len(inputs) == len(self.in_nodes)
-        for node, input in zip(self.in_nodes, inputs):
-            self.net.node[node]['input'] = [input]
-
-        # Traverse the graph, saving the output of each out node
-        outputs = [None] * len(self.out_nodes)
-        for node in self.traversal_order:
-            cur_node = self.net.node[node]
-            input = self.format_input(cur_node.pop('input'))
-
-            if len(input) == 0:
-                raise RuntimeError('Node {} has no inputs'.format(node))
-
-            out = cur_node['module'](input)
-
-            self.hook(node, out)
-
-            if node in self.out_nodes:
-                outputs[self.output_index[node]] = out
-
-            for succ in self.net.successors(node):
-                if 'input' not in self.net.node[succ]:
-                    self.net.node[succ]['input'] = []
-                self.net.node[succ]['input'].append(out)
-
-        return outputs
 
     def sample_archs(self, probas=None, all_same=False):
         """
