@@ -15,7 +15,7 @@ class SuperNetwork(nn.Module):
         self.out_nodes = None
         self.observer = None
 
-        self.hook = None
+        self.output_index = None
 
     def set_graph(self, network, in_nodes, out_nodes):
         self.net = network
@@ -40,8 +40,8 @@ class SuperNetwork(nn.Module):
         self.set_out_nodes(out_nodes)
 
     def set_out_nodes(self, out_nodes):
+        self.output_index = dict((node, i) for i, node in enumerate(out_nodes))
         self.out_nodes = out_nodes
-        self.output_index = dict((node, i) for i, node in enumerate(self.out_nodes))
 
     def forward(self, inputs):
         # First, set the unput for each input node
@@ -63,8 +63,8 @@ class SuperNetwork(nn.Module):
 
             out = cur_node['module'](input)
 
-            if self.hook:
-                self.hook(node, out)
+            if self.node_hook:
+                self.node_hook(node, out)
 
             if node in self.out_nodes:
                 outputs[self.output_index[node]] = out

@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import networkx as nx
 import numpy as np
 import torch
@@ -8,27 +10,32 @@ from supernets.networks.SuperNetwork import SuperNetwork
 
 
 class StochasticSuperNetwork(Observable, SuperNetwork):
-    INIT_NODE_PARAM = 3
-
     def __init__(self, deter_eval, *args, **kwargs):
         super(StochasticSuperNetwork, self).__init__(*args, **kwargs)
-        self.samp_params = nn.ParameterList()
+
+        self.stochastic_node_ids = defaultdict()
+        self.stochastic_node_ids.default_factory = self.stochastic_node_ids.__len__
 
         self.blocks = nn.ModuleList([])
         self.graph = nx.DiGraph()
 
-        self.nodes_param = None
-        self.probas = None
-        self.mean_entropy = None
         self.deter_eval = deter_eval
+        self.mean_entropy = None
         self.all_same = False
 
-        self.batched_sampling = None
-        self.batched_log_probas = None
+        self.log_probas = None
+        self.samplings = None
+        self.probas = None
 
-        self.hook = self.apply_sampling
+        self.node_hook = self.apply_sampling
+        self.register_forward_pre_hook(self._sample_archs)
+        self.register_forward_pre_hook(self._fire_all_samplings)
 
     def apply_sampling(self, node, output):
+        if node not in self.stochastic_node_ids:
+            # Current node isn't stochastic
+            return output
+
         sampling = self.get_sampling(node, output)
         return output * sampling
 
@@ -40,43 +47,58 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         :param out: Tensor on which the sampling will be applied
         :return: A Variable brodcastable to out size, with all dimensions equals to one except the first one (batch)
         """
+        sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
 
-        batch_size = out.size(0)
-        sampling_dim = [batch_size] + [1] * (out.dim() - 1)
-
-        node = self.net.node[node_name]
-        if self.all_same:
-            sampling = self.batched_sampling[:, node['sampling_param']].expand(sampling_dim)
-        else:
-            sampling = self.batched_sampling[:, node['sampling_param']].contiguous().view(sampling_dim)
+        #make The sampling broadcastable with the output
+        sampling_dim = [1] * out.dim()
+        sampling_dim[0] = out.size(0)
+        sampling = sampling.view(sampling_dim)
 
         return sampling
 
-
-    def sample_archs(self, probas=None, all_same=False):
+    def set_probas(self, probas, all_same=False):
         """
-        :param probas: B_size*N_nodes Tensor containing the probability of each arch being sampled.
+        :param probas: B_size*N_nodes Tensor containing the probability of each arch being sampled in the nex forward.
         :param all_same: if True, the same sampling will be used for the whole batch in the next forward.
         :return:
         """
         if probas.dim() != 2 or all_same and probas.size(0) != 1:
             raise ValueError('probas params has wrong dimension: {} (all_same={})'.format(probas.size(), all_same))
-        self._sample_archs(probas)
         self.all_same = all_same
+        self.probas = probas
 
-        self._fire_all_samplings()
+    def _sample_archs(self, _, input):
+        """
+        Hook called by pytorch before each forward
+        :param _: Current module
+        :param input: Input given to the module's forward
+        :return:
+        """
+        # Pytorch hook gives the input as a tuple
+        if isinstance(input, tuple):
+            assert len(input) == 1
+            input = input[0]
 
-    def _sample_archs(self, probas):
-        distrib = torch.distributions.Bernoulli(probas)
+        # Check the compatibility with the batch_size
+        if self.probas.size(0) != input.size(0):
+            if self.probas.size(0) != 1:
+                raise ValueError('Sampling probabilities dimensions {} doesn\'t match with input size {}.'
+                                 .format(self.probas.size(), input.size()))
+            if not self.all_same:
+                self.probas = self.probas.expand(input.size(0), -1)
 
+        distrib = torch.distributions.Bernoulli(self.probas)
         if not self.training and self.deter_eval:
-            self.batched_sampling = (probas > 0.5).float()
+            self.samplings = (self.probas > 0.5).float()
         else:
-            self.batched_sampling = distrib.sample()
+            self.samplings = distrib.sample()
 
-        self.batched_log_probas.append(distrib.log_prob(self.batched_sampling))
+        if self.all_same:
+            self.samplings = self.samplings.expand(input.size(0), -1)
 
-    def _fire_all_samplings(self):
+        self.log_probas.append(distrib.log_prob(self.samplings))
+
+    def _fire_all_samplings(self, *args):
         """
         Method used to notify the observers of the sampling
         """
@@ -84,14 +106,12 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         for node_name in self.traversal_order:
             # todo: Implemented this way to work with old implementation, can be done in a better way now.
-            node = self.net.node[node_name]
-            sampling = self.batched_sampling[:, node['sampling_param']]
+            sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
             self.fire(type='sampling', node=node_name, value=sampling)
 
     @property
-    def sampling_parameters(self):
-        print('/!\/!\/!\ Getting samp params /!\/!\/!\ ')
-        return self.samp_params
+    def n_nodes(self):
+        return self.net.number_of_nodes()
 
     @property
     def n_layers(self):
@@ -103,9 +123,10 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
     @property
     def ordered_node_names(self):
-        return [str(elt[0]) for elt in sorted(self.net.nodes.data('sampling_param'), key=lambda x: x[1])]
+        return [str(elt[0]) for elt in sorted(self.stochastic_node_ids.items(), key=lambda x: x[1])]
 
     def update_probas_and_entropies(self):
+        raise NotImplementedError('Not available in current version')
         if self.nodes_param is None:
             self._init_nodes_param()
         self.probas = {}
@@ -123,11 +144,16 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             self.mean_entropy += e
         self.mean_entropy /= self.graph.number_of_nodes()
 
-    def _init_nodes_param(self):
-        self.nodes_param = {}
-        for node, props in self.graph.node.items():
-            if 'sampling_param' in props and props['sampling_param'] is not None:
-                self.nodes_param[node] = props['sampling_param']
+    # def _init_nodes_param(self):
+    #     self.nodes_param = {}
+    #     for node, props in self.graph.node.items():
+    #         if 'sampling_param' in props and props['sampling_param'] is not None:
+    #             self.nodes_param[node] = props['sampling_param']
+
+    def register_stochastic_node(self, node):
+        if node in self.stochastic_node_ids:
+            raise ValueError('Node {} already registered'.format(node))
+        return self.stochastic_node_ids[node]
 
     def __str__(self):
         model_descr = 'Model:{}\n' \
@@ -140,4 +166,4 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         return model_descr.format(type(self).__name__, self.graph.number_of_nodes(), len(self.blocks), self.n_layers,
                                   self.n_comp_steps, sum(i.numel() for i in self.parameters()),
                                   sum(i.numel() for i in self.parameters() if i.requires_grad),
-                                  len(self.sampling_parameters))
+                                  len(self.stochastic_node_ids))

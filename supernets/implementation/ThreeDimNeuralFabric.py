@@ -81,7 +81,10 @@ def get_scales(in_dim, downscale_rounding, n_scale):
 
 
 class ThreeDimNeuralFabric(StochasticSuperNetwork):
-    def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, static_node_proba, kernel_size=3, bias=True,
+    INPUT_NAME = 'In'
+    OUTPUT_NAME = 'Out'
+
+    def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, kernel_size=3, bias=True,
                  n_scale=0, rounding_method='ceil', adapt_first=False, *args, **kwargs):
         """
         Represents a 3 Dimensional Neural fabric, in which each layer, scale position has several identical blocks.
@@ -89,15 +92,12 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         :param n_block:
         :param n_chan:
         :param data_prop:
-        :param static_node_proba:
         :param kernel_size:
         :param bias:
         :param args:
         :param kwargs:
         """
         super(ThreeDimNeuralFabric, self).__init__(*args, **kwargs)
-        self.static_node_proba = static_node_proba
-
         self.n_layer = n_layer
         self.n_block = n_block
         self.n_chan = n_chan
@@ -133,7 +133,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self._connect_input()
         self._connect_output()
 
-        self.set_graph(self.graph, ['In'], ['Out'])
+        self.set_graph(self.graph, [self.INPUT_NAME], [self.OUTPUT_NAME])
 
     def _add_layer(self, layer_idx):
         """
@@ -175,13 +175,14 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
 
         cur_node = ((s_l, s_s, s_b), (d_l, d_s, d_b))
 
-        sampling_param = self.sampling_param_generator()
+        # sampling_param = self.sampling_param_generator()
 
-        self.graph.add_node(cur_node, module=module, sampling_param=len(self.sampling_parameters))
+        self.graph.add_node(cur_node, module=module)
+        self.register_stochastic_node(cur_node)
 
         self.graph.add_edge(cur_node[0], cur_node, width_node=cur_node)
 
-        self.sampling_parameters.append(sampling_param)
+        # self.sampling_parameters.append(sampling_param)
         self.blocks.append(module)
         return cur_node
 
@@ -195,73 +196,60 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             return
 
         module = Add_Block()
-        sampling_param = self.sampling_param_generator(static=True)
+        # sampling_param = self.sampling_param_generator(static=True)
 
-        self.graph.add_node(cur_node, module=module, sampling_param=len(self.sampling_parameters))
+        self.graph.add_node(cur_node, module=module)
+        # self.register_stochastic_node(cur_node)
 
         # for i in inputs:
         #     self.graph.add_edge(i, cur_node, width_node=cur_node)
 
         self.blocks.append(module)
-        self.sampling_parameters.append(sampling_param)
+        # self.sampling_parameters.append(sampling_param)
 
     def _connect_input(self):
-
-        in_block = 'In'
-        sampling_param = self.sampling_param_generator(static=True)
+        # sampling_param = self.sampling_param_generator(static=True)
         if self.adapt_first:
             mod = in_module_factory(self._input_size[0], self.n_chan, self.kernel_size, self.bias)
         else:
             mod = DummyBlock()
 
-        self.graph.add_node(in_block, module=mod, sampling_param=len(self.sampling_parameters))
+        self.graph.add_node(self.INPUT_NAME, module=mod)
+        # self.register_stochastic_node(self.INPUT_NAME)
 
-        self.sampling_parameters.append(sampling_param)
+        # self.sampling_parameters.append(sampling_param)
         self.blocks.append(mod)
 
         for block in range(self.n_block):
             # Connect all the blocks in first scale, first layer to the Input block
             cur_node = (0, 0, block)
-            self.graph.add_edge(in_block, cur_node, width_node=cur_node)
+            self.graph.add_edge(self.INPUT_NAME, cur_node, width_node=cur_node)
 
         for scale in range(self.n_scales):
             input_scales = self._get_scales_connections(scale, is_zip=True)
             self._add_block(0, input_scales, 0, scale)
 
     def _connect_output(self):
-        out_block = 'Out'
-        sampling_param = self.sampling_param_generator(static=True)
+        # sampling_param = self.sampling_param_generator(static=True)
 
         self.n_features = self.n_chan * self.scales[-1][0] * self.scales[-1][1]
         mod = out_module_factory(self.n_features, self.out_size, self.bias)
 
-        self.graph.add_node(out_block, module=mod, sampling_param=len(self.sampling_parameters))
+        self.graph.add_node(self.OUTPUT_NAME, module=mod)
+        # self.register_stochastic_node(self.OUTPUT_NAME)
 
-        self.sampling_parameters.append(sampling_param)
+        # self.sampling_parameters.append(sampling_param)
         self.blocks.append(mod)
 
         for block in range(self.n_block):
             # Connect all the blocks in last scale, last layer to the Out block
             cur_node = (self.n_layer - 1, self.n_scales - 1, block)
-            self.graph.add_edge(cur_node, out_block, width_node=out_block)
+            self.graph.add_edge(cur_node, self.OUTPUT_NAME, width_node=self.OUTPUT_NAME)
 
         if self.n_layer > 1:
             for scale in range(self.n_scales):
                 input_scales = self._get_scales_connections(scale, is_zip=True)
                 self._add_block(self.n_layer - 1, input_scales, self.n_layer - 1, scale, skip_agg=True)
-
-    def sampling_param_generator(self, static=False):
-        trainable = self.static_node_proba < 0
-
-        if static:
-            trainable = False
-            param_value = np.inf
-        elif trainable:
-            param_value = self.INIT_NODE_PARAM
-        else:
-            param_value = np.inf if np.random.rand() < self.static_node_proba else -np.inf
-
-        return nn.Parameter(torch.Tensor([param_value]), requires_grad=trainable)
 
     def _get_scales_connections(self, cur_scale, is_zip=False):
         """

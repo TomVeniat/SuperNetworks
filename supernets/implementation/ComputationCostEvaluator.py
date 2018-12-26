@@ -27,7 +27,7 @@ class ComputationCostEvaluator(EdgeCostEvaluator):
                 if isinstance(cur_node['module'], NetworkBlock):
                     cost = cur_node['module'].get_flop_cost(input_var)
                 else:
-                    raise RuntimeError
+                    logger.warning('Node {} isn\'t a Netwrok block'.format(node))
 
                 self.costs[self.node_index[node]] = cost
                 cur_node['input'] = []

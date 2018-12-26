@@ -156,7 +156,7 @@ class DenseResnet(StochasticSuperNetwork):
     IDENT_NAME = 'IDENT_B{}'
 
     def __init__(self, layers, blocks_per_layer, n_channels, shortcuts, shortcuts_res, shift, input_dim, n_classes,
-                 static_node_proba, bottlnecks, bn_factor=4, bias=True, dilatation=False, pool_in=False, *args,
+                 bottlnecks, bn_factor=4, bias=True, dilatation=False, pool_in=False, *args,
                  **kwargs):
         super(DenseResnet, self).__init__(*args, **kwargs)
 
@@ -172,7 +172,6 @@ class DenseResnet(StochasticSuperNetwork):
 
         self.out_dim = n_classes
         # self.loss = loss.cross_entropy_sample
-        self.static_node_proba = static_node_proba
 
         self.bottleneck = bottlnecks
         if bottlnecks:
@@ -253,18 +252,10 @@ class DenseResnet(StochasticSuperNetwork):
         return last_node
 
     def add_node(self, in_nodes, node_name, module, **args):
-        sampling_param = sampling_param_generator(self.static_node_proba, node_name)
+        self.graph.add_node(node_name, module=module, **args)
+        self.register_stochastic_node(node_name)
 
-        self.graph.add_node(node_name, module=module, sampling_param=len(self.sampling_parameters), **args)
-
-        if sampling_param is not None:
-            self.sampling_parameters.append(sampling_param)
-        else:
-            raise RuntimeError('Old version, should be fixed !')
-        if isinstance(module, nn.Module):
-            self.blocks.append(module)
-        else:
-            raise RuntimeError('Old version, should be fixed !')
+        self.blocks.append(module)
 
         for input in in_nodes:
             self.graph.add_edge(input, node_name, width_node=node_name)
@@ -298,14 +289,3 @@ class DenseResnet(StochasticSuperNetwork):
                 sources.append((self.ADD_NAME.format(source_b, n), 1))
 
         return sources
-
-
-def sampling_param_generator(static_node_proba, node_name):
-    if static_node_proba >= 0:
-        param_value = 1 if np.random.rand() < static_node_proba else -1
-        param_value *= np.inf
-        trainable = False
-    else:
-        param_value = 3
-        trainable = True
-    return nn.Parameter(torch.Tensor([param_value]), requires_grad=trainable)
