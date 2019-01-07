@@ -106,12 +106,17 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         for node_name in self.traversal_order:
             # todo: Implemented this way to work with old implementation, can be done in a better way now.
-            sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
-            self.fire(type='sampling', node=node_name, value=sampling)
+            if node_name in self.stochastic_node_ids:
+                sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
+                self.fire(type='sampling', node=node_name, value=sampling)
 
     @property
     def n_nodes(self):
         return self.net.number_of_nodes()
+
+    @property
+    def n_stoch_nodes(self):
+        return len(self.stochastic_node_ids)
 
     @property
     def n_layers(self):
@@ -158,12 +163,13 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     def __str__(self):
         model_descr = 'Model:{}\n' \
                       '\t{} nodes\n' \
+                      '\t\t{} stochastic\n' \
                       '\t{} blocks\n' \
                       '\t{} parametrized layers\n' \
                       '\t{} computation steps\n' \
-                      '\t{} parameters ({} trainable)\n' \
-                      '\t{} meta-params\n'
-        return model_descr.format(type(self).__name__, self.graph.number_of_nodes(), len(self.blocks), self.n_layers,
+                      '\t{} parameters\n' \
+                      '\t\t{} trainable\n' \
+                      '\t\t{} meta-params\n'
+        return model_descr.format(type(self).__name__, self.n_nodes, self.n_stoch_nodes, len(self.blocks), self.n_layers,
                                   self.n_comp_steps, sum(i.numel() for i in self.parameters()),
-                                  sum(i.numel() for i in self.parameters() if i.requires_grad),
-                                  len(self.stochastic_node_ids))
+                                  sum(i.numel() for i in self.parameters() if i.requires_grad), self.n_stoch_nodes)
