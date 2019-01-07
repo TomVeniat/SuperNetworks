@@ -182,7 +182,6 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
 
         self.graph.add_edge(cur_node[0], cur_node, width_node=cur_node)
 
-        # self.sampling_parameters.append(sampling_param)
         self.blocks.append(module)
         return cur_node
 
@@ -196,28 +195,19 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             return
 
         module = Add_Block()
-        # sampling_param = self.sampling_param_generator(static=True)
 
         self.graph.add_node(cur_node, module=module)
-        # self.register_stochastic_node(cur_node)
-
-        # for i in inputs:
-        #     self.graph.add_edge(i, cur_node, width_node=cur_node)
 
         self.blocks.append(module)
-        # self.sampling_parameters.append(sampling_param)
 
     def _connect_input(self):
-        # sampling_param = self.sampling_param_generator(static=True)
         if self.adapt_first:
             mod = in_module_factory(self._input_size[0], self.n_chan, self.kernel_size, self.bias)
+            self.register_stochastic_node(self.INPUT_NAME)
         else:
             mod = DummyBlock()
 
         self.graph.add_node(self.INPUT_NAME, module=mod)
-        # self.register_stochastic_node(self.INPUT_NAME)
-
-        # self.sampling_parameters.append(sampling_param)
         self.blocks.append(mod)
 
         for block in range(self.n_block):
@@ -230,15 +220,12 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             self._add_block(0, input_scales, 0, scale)
 
     def _connect_output(self):
-        # sampling_param = self.sampling_param_generator(static=True)
-
         self.n_features = self.n_chan * self.scales[-1][0] * self.scales[-1][1]
         mod = out_module_factory(self.n_features, self.out_size, self.bias)
 
         self.graph.add_node(self.OUTPUT_NAME, module=mod)
-        # self.register_stochastic_node(self.OUTPUT_NAME)
+        self.register_stochastic_node(self.OUTPUT_NAME)
 
-        # self.sampling_parameters.append(sampling_param)
         self.blocks.append(mod)
 
         for block in range(self.n_block):

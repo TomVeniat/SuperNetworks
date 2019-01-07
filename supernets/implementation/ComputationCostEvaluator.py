@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 
 class ComputationCostEvaluator(EdgeCostEvaluator):
     def init_costs(self, model):
+        device = next(model.parameters()).device
         with torch.no_grad():
-            input_var = (torch.ones(1, *model.input_size),)
+            input_var = (torch.ones(1, *model.input_size).to(device),)
             graph = model.net
 
             self.costs = torch.Tensor(graph.number_of_nodes())
