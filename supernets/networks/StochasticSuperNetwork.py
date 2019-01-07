@@ -98,17 +98,23 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         self.log_probas.append(distrib.log_prob(self.samplings))
 
-    def _fire_all_samplings(self, *args):
+    def _fire_all_samplings(self, _, input):
         """
         Method used to notify the observers of the sampling
         """
         self.fire(type='new_iteration')
+
+        # Pytorch hook gives the input as a tuple
+        assert isinstance(input, tuple) and len(input) == 1
 
         for node_name in self.traversal_order:
             # todo: Implemented this way to work with old implementation, can be done in a better way now.
             if node_name in self.stochastic_node_ids:
                 sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
                 self.fire(type='sampling', node=node_name, value=sampling)
+            else:
+                batch_size = input[0].size(0)
+                self.fire(type='sampling', node=node_name, value=torch.ones(batch_size))
 
     @property
     def n_nodes(self):

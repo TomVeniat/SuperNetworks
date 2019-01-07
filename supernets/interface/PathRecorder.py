@@ -1,15 +1,13 @@
-# import abc
+import abc
 import copy
 
 import torch
 
 
-class PathRecorder(object):
-    # __metaclass__ = abc.ABCMeta
-
+class PathRecorder(object, metaclass=abc.ABCMeta):
     def __init__(self, model):
         self.graph = model.graph
-        #todo: check default behavior
+        # todo: check default behavior
         self.default_out = model.out_nodes[0]
 
         self.n_nodes = self.graph.number_of_nodes()
@@ -118,7 +116,6 @@ class PathRecorder(object):
         self.active[node_ind] = res
 
         # eq = res.equal(other_method)
-        # print(eq)
 
     def update_global_sampling(self, used_nodes):
         self.n_samplings += 1
@@ -206,7 +203,7 @@ class PathRecorder(object):
             out_index = self.node_index[out_node]
             res += torch.stack([active[out_index] for active in self.active_nodes_seq])
 
-        return (res!=0).float()
+        return (res != 0).float()
 
     def get_state(self):
         return {'node_index': self.node_index,
