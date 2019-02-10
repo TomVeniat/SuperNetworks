@@ -1,6 +1,5 @@
-import torch
-
 import networkx as nx
+import torch
 from networkx import NetworkXError, NetworkXUnfeasible
 from torch import nn
 
@@ -44,11 +43,12 @@ class SuperNetwork(nn.Module):
         self.out_nodes = out_nodes
 
     def forward(self, inputs):
-        # First, set the unput for each input node
+        # First, set the input for each input node
         if torch.is_tensor(inputs):
             inputs = [inputs]
 
-        assert len(inputs) == len(self.in_nodes)
+        assert len(inputs) == len(self.in_nodes), 'Inputs should have as many elements as the number of input nodes. ' \
+                            'Got {} elements for {} input nodes'.format(len(inputs), len(self.in_nodes))
         for node, input in zip(self.in_nodes, inputs):
             self.net.node[node]['input'] = [input]
 

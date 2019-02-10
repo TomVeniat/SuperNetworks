@@ -64,6 +64,11 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         """
         if probas.dim() != 2 or all_same and probas.size(0) != 1:
             raise ValueError('probas params has wrong dimension: {} (all_same={})'.format(probas.size(), all_same))
+
+        if probas.size(-1) != self.n_stoch_nodes:
+            raise ValueError('Should have exactly as many probas as the number of stochastic nodes({}), got {} instead.'
+                             .format(self.n_stoch_nodes, probas.size(-1)))
+
         self.all_same = all_same
         self.probas = probas
 
@@ -79,13 +84,19 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             assert len(input) == 1
             input = input[0]
 
+        # Case of multiple input nodes where input is a list:
+        if isinstance(input, list):
+            input = input[0]
+
+        batch_size = input.size(0)
+
         # Check the compatibility with the batch_size
-        if self.probas.size(0) != input.size(0):
+        if self.probas.size(0) != batch_size:
             if self.probas.size(0) != 1:
-                raise ValueError('Sampling probabilities dimensions {} doesn\'t match with input size {}.'
-                                 .format(self.probas.size(), input.size()))
+                raise ValueError('Sampling probabilities dimensions {} doesn\'t match with batch size {}.'
+                                 .format(self.probas.size(), batch_size))
             if not self.all_same:
-                self.probas = self.probas.expand(input.size(0), -1)
+                self.probas = self.probas.expand(batch_size, -1)
 
         distrib = torch.distributions.Bernoulli(self.probas)
         if not self.training and self.deter_eval:
@@ -94,7 +105,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             self.samplings = distrib.sample()
 
         if self.all_same:
-            self.samplings = self.samplings.expand(input.size(0), -1)
+            self.samplings = self.samplings.expand(batch_size, -1)
 
         self.log_probas.append(distrib.log_prob(self.samplings))
 
@@ -106,6 +117,11 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         # Pytorch hook gives the input as a tuple
         assert isinstance(input, tuple) and len(input) == 1
+        input = input[0]
+
+        # Case of multiple input nodes where input is a list:
+        if isinstance(input, list):
+            input = input[0]
 
         for node_name in self.traversal_order:
             # todo: Implemented this way to work with old implementation, can be done in a better way now.
@@ -113,7 +129,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
                 self.fire(type='sampling', node=node_name, value=sampling)
             else:
-                batch_size = input[0].size(0)
+                batch_size = input.size(0)
                 self.fire(type='sampling', node=node_name, value=torch.ones(batch_size))
 
     @property
@@ -178,4 +194,4 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                       '\t\t{} meta-params\n'
         return model_descr.format(type(self).__name__, self.n_nodes, self.n_stoch_nodes, len(self.blocks), self.n_layers,
                                   self.n_comp_steps, sum(i.numel() for i in self.parameters()),
-                                  sum(i.numel() for i in self.parameters() if i.requires_grad), self.n_stoch_nodes)
+                                  sum(i.numel() for i in self.parameters() if i.requires_grad), self.n_stoch_nodes) + '\n' + super(StochasticSuperNetwork, self).__str__()
