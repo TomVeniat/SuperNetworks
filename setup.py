@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(name='supernets',
-      version='0.0.2',
+      version='0.0.3',
       description='A module containing the basics to use Super Networks',
       long_description=long_description,
       long_description_content_type="text/markdown",
