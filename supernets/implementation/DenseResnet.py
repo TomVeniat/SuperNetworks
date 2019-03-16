@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from torch import nn, torch
 
-from supernets.interface.NetworkBlock import NetworkBlock, ConvBn, Add_Block
+from supernets.interface.NetworkBlock import NetworkBlock, ConvBlock, Add_Block
 from supernets.networks.StochasticSuperNetwork import StochasticSuperNetwork
 
 
@@ -22,8 +22,8 @@ class BasicBlock(NetworkBlock):
 
         stride = int(out_chan / in_chan)
 
-        self.conv1 = ConvBn(in_chan, out_chan, stride=stride, relu=True, bias=bias)
-        self.conv2 = ConvBn(out_chan, out_chan, relu=False, bias=bias)
+        self.conv1 = ConvBlock(in_chan, out_chan, stride=stride, relu=True, bias=bias)
+        self.conv2 = ConvBlock(out_chan, out_chan, relu=False, bias=bias)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -50,9 +50,9 @@ class BottleneckBlock(NetworkBlock):
         assert input_chan <= out_chan
         stride = stride if stride is not None else int(out_chan / input_chan) if use_stride else 1
         inside_chan = int(out_chan / bottleneck_factor)
-        self.conv1 = ConvBn(input_chan, inside_chan, k_size=1, stride=stride, padding=0, relu=True, bias=bias)
-        self.conv2 = ConvBn(inside_chan, inside_chan, relu=True, bias=bias)
-        self.conv3 = ConvBn(inside_chan, out_chan, k_size=1, padding=0, relu=False, bias=bias)
+        self.conv1 = ConvBlock(input_chan, inside_chan, k_size=1, stride=stride, padding=0, relu=True, bias=bias)
+        self.conv2 = ConvBlock(inside_chan, inside_chan, relu=True, bias=bias)
+        self.conv3 = ConvBlock(inside_chan, out_chan, k_size=1, padding=0, relu=False, bias=bias)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -81,7 +81,7 @@ class Skip_Block(NetworkBlock):
         self.projection = None
         if in_chan != out_chan:
             stride = stride if stride is not None else int(out_chan / in_chan) if use_stride else 1
-            self.projection = ConvBn(in_chan, out_chan, relu=False, k_size=1, padding=0, stride=stride, bias=bias)
+            self.projection = ConvBlock(in_chan, out_chan, relu=False, k_size=1, padding=0, stride=stride, bias=bias)
             # self.projection = ConvBn(in_chan, out_chan, relu=False, stride=stride, bias=bias)
 
     def forward(self, x):

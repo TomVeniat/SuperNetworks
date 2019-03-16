@@ -2,11 +2,11 @@ import numpy as np
 import torch
 from torch import nn
 
-from supernets.interface.NetworkBlock import ConvBn, Upsamp_Block, NetworkBlock, Add_Block, DummyBlock
+from supernets.interface.NetworkBlock import ConvBlock, Upsamp_Block, NetworkBlock, Add_Block, DummyBlock
 from supernets.networks.StochasticSuperNetwork import StochasticSuperNetwork
 
 
-def downsampling_layer(n_chan, k_size, bias=True, in_chan=None, size=None, rounding='ceil'):
+def downsampling_layer(n_chan, k_size, bias=True, bn=True, in_chan=None, size=None, rounding='ceil'):
     """
     :param size: the *input* size given to this layer
     :param rounding: The rounding method used to calculate the size of the downscaled feature maps.
@@ -25,15 +25,15 @@ def downsampling_layer(n_chan, k_size, bias=True, in_chan=None, size=None, round
         raise RuntimeError
 
     in_chan = in_chan or n_chan
-    return ConvBn(in_chan, n_chan, relu=False, k_size=k_size, stride=2, padding=padding, bias=bias)
+    return ConvBlock(in_chan, n_chan, relu=False, k_size=k_size, stride=2, padding=padding, bias=bias, bn=bn)
 
 
-def samesampling_layer(n_chan, k_size, bias=True, in_chan=None, ):
+def samesampling_layer(n_chan, k_size, bias=True, bn=True, in_chan=None, ):
     in_chan = in_chan or n_chan
-    return ConvBn(in_chan, n_chan, relu=False, k_size=k_size, bias=bias)
+    return ConvBlock(in_chan, n_chan, relu=False, k_size=k_size, bias=bias, bn=bn)
 
 
-def upsampling_layer(n_chan, k_size, bias=True, size=None, in_chan=None):
+def upsampling_layer(n_chan, k_size, bias=True, bn=True, size=None, in_chan=None):
     """
     :param size: the wanted *output* size for this layer.
     """
@@ -42,7 +42,7 @@ def upsampling_layer(n_chan, k_size, bias=True, size=None, in_chan=None):
 
 
 def in_module_factory(in_chan, n_chan, k_size, bias):
-    return ConvBn(in_chan, n_chan, relu=False, k_size=k_size, bias=bias)
+    return ConvBlock(in_chan, n_chan, relu=False, k_size=k_size, bias=bias, bn=bn)
 
 
 def out_module_factory(in_features, out_dim, bias):
@@ -85,9 +85,9 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
     OUTPUT_NAME = 'Out'
 
     def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, kernel_size=3, bias=True,
-                 n_scale=0, rounding_method='ceil', adapt_first=False, *args, **kwargs):
+                 n_scale=0, rounding_method='ceil', adapt_first=False, bn=True, *args, **kwargs):
         """
-        Represents a 3 Dimensional Neural fabric, in which each layer, scale position has several identical blocks.
+        Represents a 3 Dimensional Neural fabric, in which each (layer, scale) position has several identical blocks.
         :param n_layer:
         :param n_block:
         :param n_chan:
@@ -103,6 +103,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self.n_chan = n_chan
         self.kernel_size = kernel_size
         self.bias = bias
+        self.bn = bn
 
         self.adapt_first = adapt_first
         if rounding_method == 'ceil':
@@ -122,10 +123,10 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
 
         self.loss = nn.CrossEntropyLoss(reduce=False)
 
-        conv_params = (self.n_chan, self.kernel_size, self.bias)
-        self.downsampling = lambda **kwargs: downsampling_layer(*conv_params, **kwargs, rounding=rounding_method)
-        self.samesampling = lambda **kwargs: samesampling_layer(*conv_params, **kwargs)
-        self.upsampling = lambda **kwargs: upsampling_layer(*conv_params, **kwargs)
+        conv_block_params = dict(n_chan=self.n_chan, k_size=self.kernel_size, bias=self.bias, bn=self.bn)
+        self.downsampling = lambda **kwargs: downsampling_layer(**conv_block_params, **kwargs, rounding=rounding_method)
+        self.samesampling = lambda **kwargs: samesampling_layer(**conv_block_params, **kwargs)
+        self.upsampling = lambda **kwargs: upsampling_layer(**conv_block_params, **kwargs)
 
         for i in range(1, n_layer):
             self._add_layer(i)

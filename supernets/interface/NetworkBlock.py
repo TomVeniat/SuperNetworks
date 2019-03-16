@@ -51,26 +51,29 @@ class DummyBlock(NetworkBlock):
         return 0
 
 
-class ConvBn(NetworkBlock):
+class ConvBlock(NetworkBlock):
     n_layers = 1
     n_comp_steps = 1
 
-    def __init__(self, in_chan, out_chan, relu, k_size=3, stride=1, padding=1, dilatation=1, bias=True):
-        super(ConvBn, self).__init__()
-        self.conv = nn.Conv2d(in_chan, out_chan, kernel_size=k_size, stride=stride, padding=padding, dilation=dilatation, bias=bias)
-        self.bn = nn.BatchNorm2d(out_chan)
+    def __init__(self, in_chan, out_chan, relu, k_size=3, stride=1, padding=1, dilatation=1, bn=True, bias=True):
+        super(ConvBlock, self).__init__()
+        self.bn = bn
         self.relu = relu
 
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.bn(x)
+        modules = [nn.Conv2d(in_chan, out_chan, kernel_size=k_size, stride=stride, padding=padding, dilation=dilatation, bias=bias)]
+        if self.bn:
+            modules.append(nn.BatchNorm2d(out_chan))
         if self.relu:
-            x = F.relu(x)
-        return x
+            modules.append(nn.ReLU)
+
+        self.mods = nn.Sequential(*modules)
+
+    def forward(self, x):
+        return self.mods(x)
 
     def get_flop_cost(self, x):
         y = self(x)
-        return self.get_conv2d_flops(x, y, self.conv.kernel_size)
+        return self.get_conv2d_flops(x, y, self.mods[0].kernel_size)
 
 
 class Upsamp_Block(NetworkBlock):
@@ -79,7 +82,7 @@ class Upsamp_Block(NetworkBlock):
 
     def __init__(self, in_chan, out_chan, relu, k_size, bias, scale_size, scale_factor=2):
         super(Upsamp_Block, self).__init__()
-        self.conv_layer = ConvBn(in_chan, out_chan, relu=relu, k_size=k_size, bias=bias)
+        self.conv_layer = ConvBlock(in_chan, out_chan, relu=relu, k_size=k_size, bias=bias)
         self.scale_factor = scale_factor
         self.scale_size = scale_size
         self.rescale_params = dict(mode='bilinear', align_corners=False)
