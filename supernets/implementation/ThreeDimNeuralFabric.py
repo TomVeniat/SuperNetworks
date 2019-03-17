@@ -65,7 +65,8 @@ class Out(NetworkBlock):
 
     def get_flop_cost(self, x):
         y = self(x)
-        return x[0].size(1) * y.size(1)
+        x_dim = x[0].size(1) if isinstance(x, list) else x.size(1)
+        return x_dim * y.size(1)
 
 
 def get_scales(in_dim, downscale_rounding, n_scale):
