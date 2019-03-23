@@ -23,6 +23,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         self.mean_entropy = None
         self.all_same = False
 
+        self.distrib_entropies = None
         self.log_probas = None
         self.samplings = None
         self.probas = None
@@ -107,6 +108,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         if self.all_same:
             self.samplings = self.samplings.expand(batch_size, -1)
 
+        self.distrib_entropies.append(distrib.entropy())
         self.log_probas.append(distrib.log_prob(self.samplings))
 
     def _fire_all_samplings(self, _, input):
