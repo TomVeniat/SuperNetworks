@@ -64,7 +64,7 @@ class SuperNetwork(nn.Module):
             out = cur_node['module'](input)
 
             if self.node_hook:
-                self.node_hook(node, out)
+                out = self.node_hook(node, out)
 
             if node in self.out_nodes:
                 outputs[self.output_index[node]] = out
