@@ -1,4 +1,5 @@
 from collections import defaultdict
+import itertools
 
 import networkx as nx
 import numpy as np
@@ -13,8 +14,10 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     def __init__(self, deter_eval, *args, **kwargs):
         super(StochasticSuperNetwork, self).__init__(*args, **kwargs)
 
-        self.stochastic_node_ids = defaultdict()
-        self.stochastic_node_ids.default_factory = self.stochastic_node_ids.__len__
+        self.stochastic_node_ids_old = defaultdict()
+        self.stochastic_node_ids_old.default_factory = self.stochastic_node_ids_old.__len__
+        self.stochastic_node_ids = {}
+        self.stochastic_node_id_generator = itertools.count()
 
         self.blocks = nn.ModuleList([])
         self.graph = nx.DiGraph()
@@ -154,7 +157,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
     @property
     def ordered_node_names(self):
-        return [str(elt[0]) for elt in sorted(self.stochastic_node_ids.items(), key=lambda x: x[1])]
+        return [str(elt[0]) for elt in sorted(self.stochastic_node_ids.items(), key=lambda x: x[1] if isinstance(x[1], int) else x[1][0])]
 
     def update_probas_and_entropies(self):
         raise NotImplementedError('Not available in current version')
@@ -181,10 +184,19 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     #         if 'sampling_param' in props and props['sampling_param'] is not None:
     #             self.nodes_param[node] = props['sampling_param']
 
-    def register_stochastic_node(self, node):
+    def register_stochastic_node(self, node, n_params=1):
         if node in self.stochastic_node_ids:
             raise ValueError('Node {} already registered'.format(node))
-        return self.stochastic_node_ids[node]
+        self.stochastic_node_ids_old[node]
+        if n_params == 1:
+            id = next(self.stochastic_node_id_generator)
+            self.stochastic_node_ids[node] = id
+            return id
+        else:
+            ids = [next(self.stochastic_node_id_generator) for i in range(n_params)]
+            self.stochastic_node_ids[node] = ids
+            return ids
+
 
     def __str__(self):
         model_descr = 'Model:{}\n' \

@@ -115,9 +115,10 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             raise ValueError("'downscale_rounding' param must be 'ceil' or 'floor' (got {})".format(rounding_method))
         self.downscale_rounding = downscale_rounding
 
-        self._input_size = input_dim
+        assert len(input_dim) == 3
+        self._input_size = [input_dim]
 
-        self.scales = get_scales(self.input_size, self.downscale_rounding, n_scale)
+        self.scales = get_scales(self.input_size[0], self.downscale_rounding, n_scale)
         self.n_scales = len(self.scales)
 
         self.out_size = n_classes
@@ -164,7 +165,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
 
     def _add_transformation(self, s_l, s_s, s_b, d_l, d_s, d_b):
         if not self.adapt_first and s_l == 0 and s_s == 0:
-            in_scale = self._input_size[0]
+            in_scale = self._input_size[0][0]
         else:
             in_scale = None
 
@@ -204,7 +205,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
 
     def _connect_input(self):
         if self.adapt_first:
-            mod = in_module_factory(self._input_size[0], self.n_chan, self.kernel_size, self.bias)
+            mod = in_module_factory(self._input_size[0][0], self.n_chan, self.kernel_size, self.bias)
             self.register_stochastic_node(self.INPUT_NAME)
         else:
             mod = DummyBlock()
