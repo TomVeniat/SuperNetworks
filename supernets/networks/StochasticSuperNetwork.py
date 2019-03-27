@@ -14,10 +14,8 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     def __init__(self, deter_eval, *args, **kwargs):
         super(StochasticSuperNetwork, self).__init__(*args, **kwargs)
 
-        self.stochastic_node_ids_old = defaultdict()
-        self.stochastic_node_ids_old.default_factory = self.stochastic_node_ids_old.__len__
         self.stochastic_node_ids = {}
-        self.stochastic_node_id_generator = itertools.count()
+        self.stochastic_node_next_id = 0
 
         self.blocks = nn.ModuleList([])
         self.graph = nx.DiGraph()
@@ -54,10 +52,13 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         """
         sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
 
-        #make The sampling broadcastable with the output
-        sampling_dim = [1] * out.dim()
-        sampling_dim[0] = out.size(0)
-        sampling = sampling.view(sampling_dim)
+        assert sampling.dim() == 1 or sampling.size() == out.size()
+
+        if sampling.dim() == 1:
+            #  Make The sampling broadcastable with the output
+            sampling_dim = [1] * out.dim()
+            sampling_dim[0] = out.size(0)
+            sampling = sampling.view(sampling_dim)
 
         return sampling
 
@@ -70,9 +71,9 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         if probas.dim() != 2 or all_same and probas.size(0) != 1:
             raise ValueError('probas params has wrong dimension: {} (all_same={})'.format(probas.size(), all_same))
 
-        if probas.size(-1) != self.n_stoch_nodes:
+        if probas.size(-1) != self.n_sampling_params:
             raise ValueError('Should have exactly as many probas as the number of stochastic nodes({}), got {} instead.'
-                             .format(self.n_stoch_nodes, probas.size(-1)))
+                             .format(self.n_sampling_params, probas.size(-1)))
 
         self.all_same = all_same
         self.probas = probas
@@ -148,6 +149,10 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         return len(self.stochastic_node_ids)
 
     @property
+    def n_sampling_params(self):
+        return self.stochastic_node_next_id
+
+    @property
     def n_layers(self):
         return sum([mod.n_layers for mod in self.blocks])
 
@@ -184,17 +189,18 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     #         if 'sampling_param' in props and props['sampling_param'] is not None:
     #             self.nodes_param[node] = props['sampling_param']
 
-    def register_stochastic_node(self, node, n_params=1):
+    def register_stochastic_node(self, node, n_ops=1):
         if node in self.stochastic_node_ids:
             raise ValueError('Node {} already registered'.format(node))
-        self.stochastic_node_ids_old[node]
-        if n_params == 1:
-            id = next(self.stochastic_node_id_generator)
-            self.stochastic_node_ids[node] = id
-            return id
+        if n_ops == 1:
+            # id = next(self.stochastic_node_id_generator)
+            self.stochastic_node_ids[node] = self.stochastic_node_next_id
+            self.stochastic_node_next_id += 1
+            return self.stochastic_node_ids[node]
         else:
-            ids = [next(self.stochastic_node_id_generator) for i in range(n_params)]
+            ids = [self.stochastic_node_next_id + i for i in range(n_ops)]
             self.stochastic_node_ids[node] = ids
+            self.stochastic_node_next_id += n_ops
             return ids
 
 
