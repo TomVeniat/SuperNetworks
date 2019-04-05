@@ -18,5 +18,4 @@ class StochasticEdgeCostEvaluator(EdgeCostEvaluator):
             else:
                 self.costs = torch.cat([self.costs, torch.ones(model.graph.node[node].get('n_ops', 1))])
 
-        print(self.costs)
 

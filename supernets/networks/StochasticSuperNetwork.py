@@ -25,7 +25,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         self.all_same = False
 
         self.distrib_entropies = None
-        self.used_probas = None
+        self._seq_probas = None
         self.log_probas = None
         self.samplings = None
         self.probas = None
@@ -113,7 +113,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         if self.all_same:
             self.samplings = self.samplings.expand(batch_size, -1)
 
-        self.used_probas.append(self.probas)
+        self._seq_probas.append(self.probas)
         self.distrib_entropies.append(distrib.entropy())
         self.log_probas.append(distrib.log_prob(self.samplings))
 
@@ -140,6 +140,12 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 batch_size = input.size(0)
                 self.fire(type='sampling', node=node_name, value=torch.ones(batch_size))
 
+    def start_new_sequence(self):
+        self.log_probas = []
+        self.distrib_entropies = []
+        self._seq_probas = []
+        self.fire(type='new_sequence')
+
     @property
     def n_nodes(self):
         return self.net.number_of_nodes()
@@ -163,6 +169,13 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     @property
     def ordered_node_names(self):
         return [str(elt[0]) for elt in sorted(self.stochastic_node_ids.items(), key=lambda x: x[1] if isinstance(x[1], int) else x[1][0])]
+
+    @property
+    def last_sequence_probas(self):
+        """
+        :return: The probabilities of each arch for the last sequence in format (seq_len*batch_size*n_sampling_params)
+        """
+        return torch.stack(self._seq_probas)
 
     def update_probas_and_entropies(self):
         raise NotImplementedError('Not available in current version')
