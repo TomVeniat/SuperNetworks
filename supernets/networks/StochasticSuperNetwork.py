@@ -1,5 +1,4 @@
-from collections import defaultdict
-import itertools
+from collections import OrderedDict
 
 import networkx as nx
 import numpy as np
@@ -14,7 +13,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
     def __init__(self, deter_eval, *args, **kwargs):
         super(StochasticSuperNetwork, self).__init__(*args, **kwargs)
 
-        self.stochastic_node_ids = {}
+        self.stochastic_node_ids = OrderedDict()
         self.stochastic_node_next_id = 0
 
         self.blocks = nn.ModuleList([])
@@ -168,7 +167,18 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
     @property
     def ordered_node_names(self):
-        return [str(elt[0]) for elt in sorted(self.stochastic_node_ids.items(), key=lambda x: x[1] if isinstance(x[1], int) else x[1][0])]
+        return list(map(str, self.stochastic_node_ids.keys()))
+
+    @property
+    def all_params_name(self):
+        res = []
+        for nodes, idx in self.stochastic_node_ids.items():
+            if isinstance(idx, int):
+                res.append(str(nodes))
+            else:
+                res.extend(str(node) for node in nodes)
+
+        return res
 
     @property
     def last_sequence_probas(self):
@@ -177,30 +187,17 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         """
         return torch.stack(self._seq_probas)
 
-    def update_probas_and_entropies(self):
-        raise NotImplementedError('Not available in current version')
-        if self.nodes_param is None:
-            self._init_nodes_param()
-        self.probas = {}
-        self.entropies = {}
-        self.mean_entropy = .0
-        for node, props in self.graph.nodes.items():
-            param = self.sampling_parameters[props['sampling_param']]
-            p = param.sigmoid().item()
-            self.probas[node] = p
-            if p in [0, 1]:
-                e = 0
+    def get_names_from_probas(self, probas):
+        res = {}
+        for node_name, idx in self.stochastic_node_ids.items():
+            cur_probs = probas[idx]
+            if isinstance(cur_probs, np.ndarray):
+                assert isinstance(node_name, tuple) and len(node_name) == len(cur_probs)
+                for n, p in zip(node_name, cur_probs):
+                    res[n] = p
             else:
-                e = -(p * np.log2(p)) - ((1 - p) * np.log2(1 - p))
-            self.entropies[node] = e
-            self.mean_entropy += e
-        self.mean_entropy /= self.graph.number_of_nodes()
-
-    # def _init_nodes_param(self):
-    #     self.nodes_param = {}
-    #     for node, props in self.graph.node.items():
-    #         if 'sampling_param' in props and props['sampling_param'] is not None:
-    #             self.nodes_param[node] = props['sampling_param']
+                res[node_name] = cur_probs
+        return res
 
     def register_stochastic_node(self, node, n_ops=1):
         if node in self.stochastic_node_ids:
@@ -211,11 +208,11 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             self.stochastic_node_next_id += 1
             return self.stochastic_node_ids[node]
         else:
+            assert isinstance(node, tuple) and len(node) == n_ops
             ids = [self.stochastic_node_next_id + i for i in range(n_ops)]
             self.stochastic_node_ids[node] = ids
             self.stochastic_node_next_id += n_ops
             return ids
-
 
     def __str__(self):
         model_descr = 'Model:{}\n' \
@@ -227,6 +224,8 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                       '\t{} parameters\n' \
                       '\t\t{} trainable\n' \
                       '\t\t{} meta-params\n'
-        return model_descr.format(type(self).__name__, self.n_nodes, self.n_stoch_nodes, len(self.blocks), self.n_layers,
+        return model_descr.format(type(self).__name__, self.n_nodes, self.n_stoch_nodes, len(self.blocks),
+                                  self.n_layers,
                                   self.n_comp_steps, sum(i.numel() for i in self.parameters()),
-                                  sum(i.numel() for i in self.parameters() if i.requires_grad), self.n_stoch_nodes) + '\n' + super(StochasticSuperNetwork, self).__str__()
+                                  sum(i.numel() for i in self.parameters() if i.requires_grad),
+                                  self.n_stoch_nodes) + '\n' + super(StochasticSuperNetwork, self).__str__()
