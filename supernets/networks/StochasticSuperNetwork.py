@@ -176,6 +176,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             if isinstance(idx, int):
                 res.append(str(nodes))
             else:
+                assert len(idx) == len(nodes)
                 res.extend(str(node) for node in nodes)
 
         return res

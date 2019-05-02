@@ -35,12 +35,10 @@ class NetworkBlock(nn.Module):
 
 
 class DummyBlock(NetworkBlock):
-    n_layers = 0
-    n_comp_steps = 0
-
-    def __init__(self, mod=None):
+    def __init__(self, mod=None, cost=0):
         super(DummyBlock, self).__init__()
         self.mod = mod
+        self.cost = cost
 
     def forward(self, x):
         if self.mod:
@@ -48,7 +46,15 @@ class DummyBlock(NetworkBlock):
         return x
 
     def get_flop_cost(self, x):
-        return 0
+        return self.cost
+
+    @property
+    def n_comp_steps(self):
+        return self.cost
+
+    @property
+    def n_layers(self):
+        return self.cost
 
 
 class ConvBlock(NetworkBlock):
@@ -104,10 +110,9 @@ class Add_Block(NetworkBlock):
     n_comp_steps = 1
 
     def forward(self, x):
-        if not isinstance(x, list):
-            return F.relu(x)
-        assert isinstance(x, list)
-        return F.relu(sum(x))
+        if isinstance(x, dict):
+            x = sum(x.values())
+        return F.relu(x)
 
     def get_flop_cost(self, x):
         if not isinstance(x, list):

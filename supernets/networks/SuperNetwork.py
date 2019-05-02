@@ -1,3 +1,5 @@
+import collections
+
 import networkx as nx
 import torch
 from networkx import NetworkXError, NetworkXUnfeasible
@@ -50,7 +52,9 @@ class SuperNetwork(nn.Module):
         assert len(inputs) == len(self.in_nodes), 'Inputs should have as many elements as the number of input nodes. ' \
                             'Got {} elements for {} input nodes'.format(len(inputs), len(self.in_nodes))
         for node, input in zip(self.in_nodes, inputs):
-            self.net.node[node]['input'] = [input]
+            if not isinstance(input, collections.Mapping):
+                input = dict(fed_input=input)
+            self.net.node[node]['input'] = input
 
         # Traverse the graph, saving the output of each out node
         outputs = [None] * len(self.out_nodes)
@@ -71,8 +75,8 @@ class SuperNetwork(nn.Module):
 
             for succ in self.net.successors(node):
                 if 'input' not in self.net.node[succ]:
-                    self.net.node[succ]['input'] = []
-                self.net.node[succ]['input'].append(out)
+                    self.net.node[succ]['input'] = {}
+                self.net.node[succ]['input'][node] = out
 
         return outputs
 
@@ -92,6 +96,7 @@ class SuperNetwork(nn.Module):
 
     @staticmethod
     def format_input(input):
-        if (isinstance(input, tuple) or isinstance(input, list)) and len(input) == 1:
-            input = input[0]
+        assert isinstance(input, dict), 'All inputs should now be of dict type, got {}.'.format(type(input))
+        if len(input) == 1:
+            input = list(input.values())[0]
         return input
