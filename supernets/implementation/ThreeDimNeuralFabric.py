@@ -29,6 +29,7 @@ def downsampling_layer(n_chan, k_size, bias=True, bn=True, in_chan=None, size=No
 
 
 def samesampling_layer(n_chan, k_size, bias=True, bn=True, in_chan=None, ):
+
     in_chan = in_chan or n_chan
     return ConvBlock(in_chan, n_chan, relu=False, k_size=k_size, bias=bias, bn=bn)
 
@@ -37,6 +38,7 @@ def upsampling_layer(n_chan, k_size, bias=True, bn=True, size=None, in_chan=None
     """
     :param size: the wanted *output* size for this layer.
     """
+
     in_chan = in_chan or n_chan
     return Upsamp_Block(in_chan, n_chan, False, k_size, bias, scale_size=size)
 
@@ -94,7 +96,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
     OUTPUT_NAME = 'Out'
 
     def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, kernel_size=3, bias=True,
-                 n_scale=0, rounding_method='ceil', adapt_first=False, bn=True, *args, **kwargs):
+                 n_scale=0, rounding_method='ceil', adapt_first=False, bn=True, use_upsampling=True, *args, **kwargs):
         """
         Represents a 3 Dimensional Neural fabric, in which each (layer, scale) position has several identical blocks.
         :param n_layer:
@@ -113,6 +115,8 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self.kernel_size = kernel_size
         self.bias = bias
         self.bn = bn
+
+        self.use_upsampling = use_upsampling
 
         self.adapt_first = adapt_first
         if rounding_method == 'ceil':
@@ -283,8 +287,11 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
 
         if is_zip:
             max_scale = cur_scale
-        else:
+        elif self.use_upsampling:
             max_scale = np.min([self.n_scales, cur_scale + 2])
+        else:
+            max_scale = np.min([self.n_scales, cur_scale + 1])
+
         return range(min_scale, max_scale)
 
     def _get_blocks_connections(self, cur_block):
