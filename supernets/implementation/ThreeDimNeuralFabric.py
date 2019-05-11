@@ -41,7 +41,7 @@ def upsampling_layer(n_chan, k_size, bias=True, bn=True, size=None, in_chan=None
     return Upsamp_Block(in_chan, n_chan, False, k_size, bias, scale_size=size)
 
 
-def in_module_factory(in_chan, n_chan, k_size, bias):
+def in_module_factory(in_chan, n_chan, k_size, bias, bn):
     return ConvBlock(in_chan, n_chan, relu=False, k_size=k_size, bias=bias, bn=bn)
 
 
@@ -70,6 +70,10 @@ class Out(NetworkBlock):
 
 
 def get_scales(in_dim, downscale_rounding, n_scale):
+    old_dim = in_dim
+    assert isinstance(in_dim[0], tuple)
+
+    in_dim = in_dim[0]
     scales = [tuple(in_dim[-2:])]
     if not n_scale or n_scale < 0:
         n_scale = np.inf
@@ -78,11 +82,15 @@ def get_scales(in_dim, downscale_rounding, n_scale):
     while 1 not in scales[-1] and s < n_scale:
         s += 1
         scales.append((int(downscale_rounding(scales[-1][0] / 2)), int(downscale_rounding(scales[-1][1] / 2))))
+
+    if len(old_dim) > 1:
+        assert [itm[1:] for itm in old_dim] == scales
     return scales
 
 
 class ThreeDimNeuralFabric(StochasticSuperNetwork):
     INPUT_NAME = 'In'
+    MULT_INPUT_NAME = 'In_{}'
     OUTPUT_NAME = 'Out'
 
     def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, kernel_size=3, bias=True,
@@ -115,10 +123,19 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             raise ValueError("'downscale_rounding' param must be 'ceil' or 'floor' (got {})".format(rounding_method))
         self.downscale_rounding = downscale_rounding
 
-        assert len(input_dim) == 3
-        self._input_size = [input_dim]
+        # assert len(input_dim) == 3
+        if isinstance(input_dim[0], int):
+            # Input_dim of the top left corner
+            self._input_size = [input_dim]
+        elif isinstance(input_dim[0], tuple):
+            # Input_dim at each scale of the CNF 
+            self._input_size = list(input_dim)
+        else:
+            raise ValueError("Input dim should be a tuple<int> of tuple<tuple<int>>")
 
-        self.scales = get_scales(self.input_size[0], self.downscale_rounding, n_scale)
+        self.multi_scale = len(self.input_size) > 1
+
+        self.scales = get_scales(self.input_size, self.downscale_rounding, n_scale)
         self.n_scales = len(self.scales)
 
         self.out_size = n_classes
@@ -133,10 +150,10 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         for i in range(1, n_layer):
             self._add_layer(i)
 
-        self._connect_input()
-        self._connect_output()
+        graph_inputs = self._connect_input()
+        graph_outputs = self._connect_output()
 
-        self.set_graph(self.graph, [self.INPUT_NAME], [self.OUTPUT_NAME])
+        self.set_graph(self.graph, graph_inputs, graph_outputs)
 
     def _add_layer(self, layer_idx):
         """
@@ -164,7 +181,8 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self._add_aggregation(layer, scale, block, transformations, skip_agg)
 
     def _add_transformation(self, s_l, s_s, s_b, d_l, d_s, d_b):
-        if not self.adapt_first and s_l == 0 and s_s == 0:
+        """Param names are for {source, destination}_{layer, scale, block}"""
+        if not self.adapt_first and s_l == 0 and (s_s == 0 or self.multi_scale):
             in_scale = self._input_size[0][0]
         else:
             in_scale = None
@@ -204,23 +222,35 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self.blocks.append(module)
 
     def _connect_input(self):
-        if self.adapt_first:
-            mod = in_module_factory(self._input_size[0][0], self.n_chan, self.kernel_size, self.bias)
-            self.register_stochastic_node(self.INPUT_NAME)
-        else:
-            mod = DummyBlock()
+        inputs = []
+        for i, in_size in enumerate(self.input_size):
+            in_name = self.MULT_INPUT_NAME.format(in_size)
+            inputs.append(in_name)
+            if self.adapt_first:
+                mod = in_module_factory(in_size[0], self.n_chan, self.kernel_size, self.bias, self.bn)
+                self.register_stochastic_node(in_name)
+            else:
+                mod = DummyBlock()
 
-        self.graph.add_node(self.INPUT_NAME, module=mod)
-        self.blocks.append(mod)
+            self.graph.add_node(in_name, module=mod)
+            self.blocks.append(mod)
 
-        for block in range(self.n_block):
-            # Connect all the blocks in first scale, first layer to the Input block
-            cur_node = (0, 0, block)
-            self.graph.add_edge(self.INPUT_NAME, cur_node, width_node=cur_node)
+            for block in range(self.n_block):
+                # Connect all the blocks in first scale, first layer to the Input block
+                cur_node = (0, i, block)
+                self.graph.add_edge(in_name, cur_node, width_node=cur_node)
 
-        for scale in range(self.n_scales):
-            input_scales = self._get_scales_connections(scale, is_zip=True)
-            self._add_block(0, input_scales, 0, scale)
+            if self.multi_scale:
+                for scale in range(self.n_scales):
+                    cur_node = (0, scale, 0)
+                    self.graph.add_node(cur_node, module=DummyBlock())
+            else:
+                # Add zip
+                for scale in range(self.n_scales):
+                    input_scales = self._get_scales_connections(scale, is_zip=True)
+                    self._add_block(0, input_scales, 0, scale)
+
+        return inputs
 
     def _connect_output(self):
         self.n_features = self.n_chan * self.scales[-1][0] * self.scales[-1][1]
@@ -240,6 +270,8 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             for scale in range(self.n_scales):
                 input_scales = self._get_scales_connections(scale, is_zip=True)
                 self._add_block(self.n_layer - 1, input_scales, self.n_layer - 1, scale, skip_agg=True)
+        
+        return [self.OUTPUT_NAME]
 
     def _get_scales_connections(self, cur_scale, is_zip=False):
         """
