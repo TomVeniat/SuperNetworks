@@ -93,6 +93,7 @@ def get_scales(in_dim, downscale_rounding, n_scale):
 class ThreeDimNeuralFabric(StochasticSuperNetwork):
     INPUT_NAME = 'In'
     MULT_INPUT_NAME = 'In_{}'
+    MULT_INPUT_NAME_CHAN = 'In_{}_Chan{}'
     OUTPUT_NAME = 'Out'
 
     def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, kernel_size=3, bias=True,
@@ -228,31 +229,33 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
     def _connect_input(self):
         inputs = []
         for i, in_size in enumerate(self.input_size):
-            in_name = self.MULT_INPUT_NAME.format(in_size)
-            inputs.append(in_name)
             if self.adapt_first:
+                in_name = self.MULT_INPUT_NAME.format(in_size)
                 mod = in_module_factory(in_size[0], self.n_chan, self.kernel_size, self.bias, self.bn)
                 self.register_stochastic_node(in_name)
+                self.graph.add_node(in_name, module=mod)
+                self.blocks.append(mod)
             else:
-                mod = DummyBlock()
+                in_name = tuple(self.MULT_INPUT_NAME_CHAN.format(in_size, c) for c in range(in_size[0]))
+                self.graph.add_node(in_name, module=DummyBlock(), n_ops=in_size[0])
+                self.register_stochastic_node(in_name, n_ops=in_size[0])
 
-            self.graph.add_node(in_name, module=mod)
-            self.blocks.append(mod)
+            inputs.append(in_name)
 
             for block in range(self.n_block):
                 # Connect all the blocks in first scale, first layer to the Input block
                 cur_node = (0, i, block)
                 self.graph.add_edge(in_name, cur_node, width_node=cur_node)
 
-            if self.multi_scale:
-                for scale in range(self.n_scales):
-                    cur_node = (0, scale, 0)
-                    self.graph.add_node(cur_node, module=DummyBlock())
-            else:
-                # Add zip
-                for scale in range(self.n_scales):
-                    input_scales = self._get_scales_connections(scale, is_zip=True)
-                    self._add_block(0, input_scales, 0, scale)
+        if self.multi_scale:
+            for scale in range(self.n_scales):
+                cur_node = (0, scale, 0)
+                self.graph.add_node(cur_node, module=DummyBlock())
+        else:
+            # Add zip
+            for scale in range(self.n_scales):
+                input_scales = self._get_scales_connections(scale, is_zip=True)
+                self._add_block(0, input_scales, 0, scale)
 
         return inputs
 

@@ -51,13 +51,19 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         """
         sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
 
-        assert sampling.dim() == 1 or sampling.size() == out.size()
+        # assert sampling.dim() == 1 or sampling.size() == out.size()
 
         if sampling.dim() == 1:
             #  Make The sampling broadcastable with the output
             sampling_dim = [1] * out.dim()
             sampling_dim[0] = out.size(0)
             sampling = sampling.view(sampling_dim)
+        elif sampling.size() != out.size():
+            assert sampling.size() == out.size()[:2]
+            sampling_dim = [1] * out.dim()
+            sampling_dim[:2] = out.size()[:2]
+            sampling = sampling.view(sampling_dim)
+
 
         return sampling
 
