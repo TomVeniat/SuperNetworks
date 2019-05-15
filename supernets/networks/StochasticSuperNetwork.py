@@ -10,7 +10,7 @@ from supernets.networks.SuperNetwork import SuperNetwork
 
 
 class StochasticSuperNetwork(Observable, SuperNetwork):
-    def __init__(self, deter_eval, *args, **kwargs):
+    def __init__(self, deter_eval, sample_type=None, *args, **kwargs):
         super(StochasticSuperNetwork, self).__init__(*args, **kwargs)
 
         self.stochastic_node_ids = OrderedDict()
@@ -20,6 +20,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         self.graph = nx.DiGraph()
 
         self.deter_eval = deter_eval
+        self.sample_type = sample_type
         self.mean_entropy = None
         self.all_same = False
 
@@ -206,7 +207,9 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 res[node_name] = cur_probs
         return res
 
-    def register_stochastic_node(self, node, n_ops=1):
+    def register_stochastic_node(self, node, n_ops=1, type=None):
+        if self.sample_type is not None and self.sample_type != type:
+            return
         if node in self.stochastic_node_ids:
             raise ValueError('Node {} already registered'.format(node))
         if n_ops == 1:

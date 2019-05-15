@@ -232,13 +232,13 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             if self.adapt_first:
                 in_name = self.MULT_INPUT_NAME.format(in_size)
                 mod = in_module_factory(in_size[0], self.n_chan, self.kernel_size, self.bias, self.bn)
-                self.register_stochastic_node(in_name)
+                self.register_stochastic_node(in_name, type='input')
                 self.graph.add_node(in_name, module=mod)
                 self.blocks.append(mod)
             else:
                 in_name = tuple(self.MULT_INPUT_NAME_CHAN.format(in_size, c) for c in range(in_size[0]))
                 self.graph.add_node(in_name, module=DummyBlock(), n_ops=in_size[0])
-                self.register_stochastic_node(in_name, n_ops=in_size[0])
+                self.register_stochastic_node(in_name, n_ops=in_size[0], type='input')
 
             inputs.append(in_name)
 
