@@ -97,7 +97,8 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
     OUTPUT_NAME = 'Out'
 
     def __init__(self, n_layer, n_block, n_chan, input_dim, n_classes, kernel_size=3, bias=True,
-                 n_scale=0, rounding_method='ceil', adapt_first=False, bn=True, use_upsampling=True, *args, **kwargs):
+                 n_scale=0, rounding_method='ceil', adapt_first=False, bn=True, use_upsampling=True,
+                 split_channels=False, *args, **kwargs):
         """
         Represents a 3 Dimensional Neural fabric, in which each (layer, scale) position has several identical blocks.
         :param n_layer:
@@ -139,6 +140,7 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
             raise ValueError("Input dim should be a tuple<int> of tuple<tuple<int>>")
 
         self.multi_scale = len(self.input_size) > 1
+        self.split_channels = split_channels
 
         self.scales = get_scales(self.input_size, self.downscale_rounding, n_scale)
         self.n_scales = len(self.scales)
@@ -235,10 +237,14 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
                 self.register_stochastic_node(in_name, type='input')
                 self.graph.add_node(in_name, module=mod)
                 self.blocks.append(mod)
-            else:
+            elif self.split_channels:
                 in_name = tuple(self.MULT_INPUT_NAME_CHAN.format(in_size, c) for c in range(in_size[0]))
                 self.graph.add_node(in_name, module=DummyBlock(), n_ops=in_size[0])
                 self.register_stochastic_node(in_name, n_ops=in_size[0], type='input')
+            else:
+                in_name =self.MULT_INPUT_NAME.format(in_size)
+                self.graph.add_node(in_name, module=DummyBlock(), n_ops=1)
+                self.register_stochastic_node(in_name, n_ops=1, type='input')
 
             inputs.append(in_name)
 
