@@ -147,6 +147,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 self.fire(type='sampling', node=node_name, value=torch.ones(batch_size))
 
     def start_new_sequence(self):
+        self.probas = None
         self.log_probas = []
         self.distrib_entropies = []
         self._seq_probas = []
@@ -187,6 +188,10 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 res.extend(str(node) for node in nodes)
 
         return res
+
+    @property
+    def last_arch_probas(self):
+        return self.probas
 
     @property
     def last_sequence_probas(self):
