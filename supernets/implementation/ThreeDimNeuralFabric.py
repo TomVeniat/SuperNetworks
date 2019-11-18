@@ -1,5 +1,6 @@
+from functools import partial
+
 import numpy as np
-import torch
 from torch import nn
 
 from supernets.interface.NetworkBlock import ConvBlock, Upsamp_Block, NetworkBlock, Add_Block, DummyBlock
@@ -150,9 +151,9 @@ class ThreeDimNeuralFabric(StochasticSuperNetwork):
         self.loss = nn.CrossEntropyLoss(reduce=False)
 
         conv_block_params = dict(n_chan=self.n_chan, k_size=self.kernel_size, bias=self.bias, bn=self.bn)
-        self.downsampling = lambda **kwargs: downsampling_layer(**conv_block_params, **kwargs, rounding=rounding_method)
-        self.samesampling = lambda **kwargs: samesampling_layer(**conv_block_params, **kwargs)
-        self.upsampling = lambda **kwargs: upsampling_layer(**conv_block_params, **kwargs)
+        self.downsampling = partial(downsampling_layer, **conv_block_params, rounding=rounding_method)
+        self.samesampling = partial(samesampling_layer, **conv_block_params)
+        self.upsampling = partial(upsampling_layer, **conv_block_params)
 
         for i in range(1, n_layer):
             self._add_layer(i)
