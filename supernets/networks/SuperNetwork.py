@@ -60,7 +60,7 @@ class SuperNetwork(nn.Module):
         outputs = [None] * len(self.out_nodes)
         for node in self.traversal_order:
             cur_node = self.net.node[node]
-            input = self.format_input(cur_node.pop('input'))
+            input = self.format_input(cur_node.pop('input'), cur_node.get('squeeze_dict', True))
 
             if len(input) == 0:
                 raise RuntimeError('Node {} has no inputs'.format(node))
@@ -95,8 +95,8 @@ class SuperNetwork(nn.Module):
                     for node_name, node_data in dict(self.graph.nodes(True)).items())
 
     @staticmethod
-    def format_input(input):
+    def format_input(input, squeeze_dict=True):
         assert isinstance(input, dict), 'All inputs should now be of dict type, got {}.'.format(type(input))
-        if len(input) == 1:
+        if len(input) == 1 and squeeze_dict:
             input = list(input.values())[0]
         return input

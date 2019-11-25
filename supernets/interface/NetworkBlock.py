@@ -109,10 +109,16 @@ class Add_Block(NetworkBlock):
     n_layers = 0
     n_comp_steps = 1
 
+    def __init__(self, activation=True):
+        super(Add_Block, self).__init__()
+        self.activation = activation
+
     def forward(self, x):
         if isinstance(x, dict):
             x = sum(x.values())
-        return F.relu(x)
+        if self.activation:
+            x = F.relu(x)
+        return x
 
     def get_flop_cost(self, x):
         if not isinstance(x, list):
