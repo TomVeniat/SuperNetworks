@@ -29,7 +29,8 @@ class SuperNetwork(nn.Module):
 
         if not (self.traversal_order[0] in in_nodes and self.traversal_order[-1] in out_nodes):
             raise ValueError('Seems like the given graph is broken '
-                             '(First node not in in_nodes or last node not in out_nodes).')
+                             '(First node {} not in in_nodes or last node {} not in out_nodes).'.format(self.traversal_order[0],
+                                                                                                        self.traversal_order[-1]))
 
         if not (isinstance(in_nodes, tuple) or isinstance(in_nodes, list)):
             raise ValueError('Input nodes should be list or tuple.')
@@ -65,6 +66,8 @@ class SuperNetwork(nn.Module):
             if len(input) == 0:
                 raise RuntimeError('Node {} has no inputs'.format(node))
 
+            # in_size = input.size() if torch.is_tensor(input) else dict((k,v.shape) for k, v in input.items())
+            # print(f"{node}({type(cur_node['module'])}) with in size: {in_size}")
             out = cur_node['module'](input)
 
             if self.node_hook:

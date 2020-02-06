@@ -10,7 +10,7 @@ from supernets.networks.SuperNetwork import SuperNetwork
 
 
 class StochasticSuperNetwork(Observable, SuperNetwork):
-    def __init__(self, deter_eval, sample_type=None, *args, **kwargs):
+    def __init__(self, sample_type=None, *args, **kwargs):
         super(StochasticSuperNetwork, self).__init__(*args, **kwargs)
 
         self.stochastic_node_ids = OrderedDict()
@@ -19,19 +19,12 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         self.blocks = nn.ModuleList([])
         self.graph = nx.DiGraph()
 
-        self.deter_eval = deter_eval
         self.sample_type = sample_type
         self.mean_entropy = None
-        self.all_same = False
 
-        self.distrib_entropies = None
-        self._seq_probas = None
-        self.log_probas = None
         self.samplings = None
-        self.probas = None
 
         self.node_hook = self.apply_sampling
-        self.register_forward_pre_hook(self._sample_archs)
         self.register_forward_pre_hook(self._fire_all_samplings)
 
     def apply_sampling(self, node, output):
@@ -64,64 +57,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             sampling_dim = [1] * out.dim()
             sampling_dim[:2] = out.size()[:2]
             sampling = sampling.view(sampling_dim)
-
-
         return sampling
-
-    def set_probas(self, probas, all_same=False):
-        """
-        :param probas: B_size*N_nodes Tensor containing the probability of each arch being sampled in the nex forward.
-        :param all_same: if True, the same sampling will be used for the whole batch in the next forward.
-        :return:
-        """
-        if probas.dim() != 2 or all_same and probas.size(0) != 1:
-            raise ValueError('probas params has wrong dimension: {} (all_same={})'.format(probas.size(), all_same))
-
-        if probas.size(-1) != self.n_sampling_params:
-            raise ValueError('Should have exactly as many probas as the number of stochastic nodes({}), got {} instead.'
-                             .format(self.n_sampling_params, probas.size(-1)))
-
-        self.all_same = all_same
-        self.probas = probas
-
-    def _sample_archs(self, _, input):
-        """
-        Hook called by pytorch before each forward
-        :param _: Current module
-        :param input: Input given to the module's forward
-        :return:
-        """
-        # Pytorch hook gives the input as a tuple
-        if isinstance(input, tuple):
-            assert len(input) == 1
-            input = input[0]
-
-        # Case of multiple input nodes where input is a list:
-        if isinstance(input, list):
-            input = input[0]
-
-        batch_size = input.size(0)
-
-        # Check the compatibility with the batch_size
-        if self.probas.size(0) != batch_size:
-            if self.probas.size(0) != 1:
-                raise ValueError('Sampling probabilities dimensions {} doesn\'t match with batch size {}.'
-                                 .format(self.probas.size(), batch_size))
-            if not self.all_same:
-                self.probas = self.probas.expand(batch_size, -1)
-
-        distrib = torch.distributions.Bernoulli(self.probas)
-        if not self.training and self.deter_eval:
-            self.samplings = (self.probas > 0.5).float()
-        else:
-            self.samplings = distrib.sample()
-
-        if self.all_same:
-            self.samplings = self.samplings.expand(batch_size, -1)
-
-        self._seq_probas.append(self.probas)
-        self.distrib_entropies.append(distrib.entropy())
-        self.log_probas.append(distrib.log_prob(self.samplings))
 
     def _fire_all_samplings(self, _, input):
         """
@@ -147,10 +83,7 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 self.fire(type='sampling', node=node_name, value=torch.ones(batch_size))
 
     def start_new_sequence(self):
-        self.probas = None
-        self.log_probas = []
-        self.distrib_entropies = []
-        self._seq_probas = []
+        self.samplings = None
         self.fire(type='new_sequence')
 
     @property
@@ -188,17 +121,6 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                 res.extend(str(node) for node in nodes)
 
         return res
-
-    @property
-    def last_arch_probas(self):
-        return self.probas
-
-    @property
-    def last_sequence_probas(self):
-        """
-        :return: The probabilities of each arch for the last sequence in format (seq_len*batch_size*n_sampling_params)
-        """
-        return torch.stack(self._seq_probas)
 
     def get_names_from_probas(self, probas):
         res = {}
