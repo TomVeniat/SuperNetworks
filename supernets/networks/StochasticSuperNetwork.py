@@ -24,10 +24,34 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
         self.samplings = None
 
-        self.node_hook = self.apply_sampling
+        self.node_pre_hook = self.prepare_input
+        # self.node_pre_hook = None
+
+        self.node_post_hook = self.apply_sampling_mask
+        # self.node_post_hook = self.apply_sampling_mult
         self.register_forward_pre_hook(self._fire_all_samplings)
 
-    def apply_sampling(self, node, output):
+    def prepare_input(self, node, input):
+        if node not in self.stochastic_node_ids:
+            # Current node isn't stochastic
+            return input
+        sampling = self.samplings[:, self.stochastic_node_ids[node]]
+        return input[sampling.bool()]
+
+    def apply_sampling_mask(self, node, input, output):
+        if node not in self.stochastic_node_ids:
+            # Current node isn't stochastic
+            return output
+
+        sampling = self.samplings[:, self.stochastic_node_ids[node]]
+        out_size = list(output.size())
+        out_size[0] = input.size(0)
+        res = torch.zeros(out_size, device=output.device)
+        res[sampling.bool()] = output
+        return res
+
+
+    def apply_sampling_mult(self, node, input, output):
         if node not in self.stochastic_node_ids:
             # Current node isn't stochastic
             return output
@@ -37,16 +61,16 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
 
     def get_sampling(self, node_name, out):
         """
-        Get a batch of sampling for the given node on the given output.
-        Fires a "sampling" event with the node name and the sampling Variable.
+        Get a batch of sampling for the given node broadcastable with the
+        given output.
         :param node_name: Name of the node to sample
         :param out: Tensor on which the sampling will be applied
-        :return: A Variable brodcastable to out size, with all dimensions equals to one except the first one (batch)
+        :return: A Variable brodcastable to out size, with all dimensions
+        equal to one except the first one (batch)
         """
         sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
 
         # assert sampling.dim() == 1 or sampling.size() == out.size()
-
         if sampling.dim() == 1:
             #  Make The sampling broadcastable with the output
             sampling_dim = [1] * out.dim()
@@ -74,13 +98,16 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
             input = input[0]
 
         for node_name in self.traversal_order:
-            # todo: Implemented this way to work with old implementation, can be done in a better way now.
+            # todo: Implemented this way to work with old implementation,
+            #  can be done in a better way now.
             if node_name in self.stochastic_node_ids:
-                sampling = self.samplings[:, self.stochastic_node_ids[node_name]]
+                node_id = self.stochastic_node_ids[node_name]
+                sampling = self.samplings[:, node_id]
                 self.fire(type='sampling', node=node_name, value=sampling)
             else:
                 batch_size = input.size(0)
-                self.fire(type='sampling', node=node_name, value=torch.ones(batch_size))
+                self.fire(type='sampling', node=node_name,
+                          value=torch.ones(batch_size))
 
     def start_new_sequence(self):
         self.samplings = None
@@ -127,7 +154,8 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
         for node_name, idx in self.stochastic_node_ids.items():
             cur_probs = probas[idx]
             if isinstance(cur_probs, np.ndarray):
-                assert isinstance(node_name, tuple) and len(node_name) == len(cur_probs)
+                assert isinstance(node_name, tuple)\
+                       and len(node_name) == len(cur_probs)
                 for n, p in zip(node_name, cur_probs):
                     res[n] = p
             else:
@@ -160,9 +188,13 @@ class StochasticSuperNetwork(Observable, SuperNetwork):
                       '\t{} computation steps\n' \
                       '\t{} parameters\n' \
                       '\t\t{} trainable\n' \
-                      '\t\t{} meta-params\n'
-        return model_descr.format(type(self).__name__, self.n_nodes, self.n_stoch_nodes, len(self.blocks),
-                                  self.n_layers,
-                                  self.n_comp_steps, sum(i.numel() for i in self.parameters()),
-                                  sum(i.numel() for i in self.parameters() if i.requires_grad),
-                                  self.n_stoch_nodes) + '\n' + super(StochasticSuperNetwork, self).__str__()
+                      '\t\t{} meta-params\n'\
+                      '\t\t{}'
+        return model_descr.format(type(self).__name__, self.n_nodes,
+                                  self.n_stoch_nodes, len(self.blocks),
+                                  self.n_layers, self.n_comp_steps,
+                                  sum(i.numel() for i in self.parameters()),
+                                  sum(i.numel() for i in self.parameters()
+                                      if i.requires_grad),
+                                  self.n_stoch_nodes,
+                                  super(StochasticSuperNetwork, self))

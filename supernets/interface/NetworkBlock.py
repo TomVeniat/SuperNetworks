@@ -125,3 +125,6 @@ class Add_Block(NetworkBlock):
             return 0
         assert isinstance(x, list)
         return x[0].numel() * (len(x) - 1)
+
+    def extra_repr(self):
+        return 'activation={}'.format(self.activation)

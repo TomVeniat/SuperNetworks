@@ -66,12 +66,15 @@ class SuperNetwork(nn.Module):
             if len(input) == 0:
                 raise RuntimeError('Node {} has no inputs'.format(node))
 
-            # in_size = input.size() if torch.is_tensor(input) else dict((k,v.shape) for k, v in input.items())
             # print(f"{node}({type(cur_node['module'])}) with in size: {in_size}")
-            out = cur_node['module'](input)
+            if self.node_pre_hook:
+                feed_in = self.node_pre_hook(node, input)
+            else:
+                feed_in = input
 
-            if self.node_hook:
-                out = self.node_hook(node, out)
+            out = cur_node['module'](feed_in)
+            if self.node_post_hook:
+                out = self.node_post_hook(node, input, out)
 
             if node in self.out_nodes:
                 outputs[self.output_index[node]] = out
