@@ -30,8 +30,15 @@ class NetworkBlock(nn.Module):
 
     @staticmethod
     def get_conv2d_flops(x, y, k_size, s_size=(1, 1)):
-        assert x.dim() == 4 and y.dim() == 4
-        return x.size(1) * y.size(1) * y.size(2) * y.size(3) * k_size[0] * k_size[1] / (s_size[0] * s_size[1])
+        if isinstance(k_size, int):
+            k_size = [k_size, k_size]
+        if isinstance(s_size, int):
+            s_size = [s_size, s_size]
+        if torch.is_tensor(x):
+            assert y.dim() == 4 and x.dim() == 4
+            x = x.shape[1:]
+            y = y.shape[1:]
+        return x[0] * y[0] * y[1] * y[2] * k_size[0] * k_size[1] / (s_size[0] * s_size[1])
 
 
 class DummyBlock(NetworkBlock):
